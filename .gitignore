@@ -1,0 +1,18 @@
+# 环境与密钥
+.env
+.env.*
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# 回归测试生成物
+docs/regression_report.md
+docs/regression_outputs/
+
+# 系统文件
+.DS_Store
+Thumbs.db
