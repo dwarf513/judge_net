@@ -8,6 +8,7 @@ __pycache__/
 *.pyo
 .venv/
 venv/
+.pytest_cache/
 
 # 回归测试生成物
 docs/regression_report.md

@@ -2,9 +2,9 @@
 
 > 网络争吵的公正裁决者：厘清事实、辨别谬误、看见降温路径，促进网络和谐健康。
 
-**智能体分享链接**：<!-- 待回填：发布后在 deploy/chatglm_agent_config.md 指引下生成链接，替换此占位符 -->
+**在线体验地址**：<!-- 待回填：按 deploy/deployment_guide.md 部署到腾讯云轻量服务器后，回填公网域名 -->
 
-**赛道**：DIY 低代码（智谱清言自定义智能体 + 分享链接交付）
+**赛道**：DIY 高代码（FastAPI 后端 + 原生前端 + Docker 部署到腾讯云轻量服务器）
 
 ---
 
@@ -47,7 +47,7 @@
 ```
 judge_net/
 ├── system_prompt.md                   # 核心：法官人格 + 全流程指令 + 护栏（558 行）
-├── knowledge/                         # 智谱清言知识库（7 个文件，1181 行）
+├── knowledge/                         # 7 个 .md，由后端 prompt_builder 注入（1181 行）
 │   ├── fallacy_taxonomy.md            #   谬误分类法（21 + 6 条）
 │   ├── conflict_typology.md           #   冲突类型 A–F + 决策树
 │   ├── source_credibility.md          #   信源可信度 Tier-1 到 Tier-4
@@ -55,6 +55,15 @@ judge_net/
 │   ├── appeal_protocol.md              #   上诉协议 + 二审备忘录
 │   ├── response_script_guardrails.md  #   应答话术护栏 + 5 风格库
 │   └── safety_refuselist.md           #   安全拒裁 R1-R6
+├── app/                               # FastAPI 后端
+│   ├── main.py                        #   FastAPI 工厂 + lifespan + 路由挂载
+│   ├── config.py                      #   pydantic-settings
+│   ├── api/                           #   /v1/adjudicate /v1/appeal /v1/reply-script
+│   └── core/                          #   llm ocr search pipeline session 等
+├── static/                            # 原生 HTML/JS 单页前端
+│   ├── index.html
+│   ├── style.css
+│   └── app.js
 ├── golden_cases/                      # 5 个匿名化金标准案例 + 期望输出
 │   ├── case_01_weibo_knowledge_debate.md      # A 类：LK-99 超导
 │   ├── case_02_zhihu_accidental_quarrel.md    # B 类：粽子甜咸
@@ -63,13 +72,18 @@ judge_net/
 │   ├── case_05_xiaohongshu_ai_scam.md         # F 类：明星代言骗局
 │   └── expected_outputs/                       # 每案期望结构（回归断言）
 ├── scripts/
-│   ├── regression_test.py             # paratera GLM-5.2 金标准回归
+│   ├── regression_test.py             # HTTP 调本地服务跑金标准回归
 │   └── requirements.txt
+├── tests/
+│   └── test_pipeline.py               # pytest 单元测试
 ├── docs/
 │   ├── design.md                      # 设计哲学 + 五环节拓展 + 黑天鹅叙事
 │   └── git_tutorial.md               # 零基础 git 入门
 ├── deploy/
-│   └── chatglm_agent_config.md       # 智谱清言平台上线操作指引
+│   └── deployment_guide.md           # 腾讯云轻量服务器部署指引
+├── Dockerfile                         # Docker 镜像构建
+├── requirements.txt                   # Python 依赖
+├── .env.example                       # 环境变量占位
 ├── AGENTS.md                          # opencode 协作约定
 └── README.md                          # 本文件
 ```
@@ -89,42 +103,50 @@ judge_net/
 ### 6.1 环境准备
 
 ```bash
-# 复用 ../scholar_agent/.env 的 paratera API Key（不在本仓库创建含密钥文件）
-python3 -m pip install --user --break-system-packages -r scripts/requirements.txt
+# 复用 ../scholar_agent/.env 的 paratera API Key，或自行准备 .env
+cp .env.example .env
+# 编辑 .env 填入 LLM_API_KEY / SEARCH_API_KEY / LLM_MODEL_VISION
+
+python3 -m pip install -r requirements.txt
 ```
 
-### 6.2 跑回归测试
+### 6.2 启动服务
 
 ```bash
-# 全部 5 个案例
-python3 scripts/regression_test.py
+uvicorn app.main:app --host 0.0.0.0 --port 7860 --reload
+```
 
-# 单个案例
-python3 scripts/regression_test.py case_03
+浏览器打开 http://localhost:7860 即可使用。
 
-# 仅从已有输出生成报告（不调用 API）
-python3 scripts/regression_test.py --report-only
+### 6.3 跑回归测试
+
+```bash
+# 先确保服务已启动
+python3 scripts/regression_test.py            # 跑全部 5 个案例
+python3 scripts/regression_test.py case_03    # 只跑 case_03
+python3 scripts/regression_test.py --report-only   # 仅从已有输出生成报告
 ```
 
 报告输出到 `docs/regression_report.md`，原始输出到 `docs/regression_outputs/`（均已被 .gitignore）。
 
-### 6.3 迭代流程
+### 6.4 迭代流程
 
-1. 改 `system_prompt.md` 或 `knowledge/*.md`。
-2. 跑 `python3 scripts/regression_test.py` 验证。
-3. 失败则定位案例 + 调整。
-4. 通过后 `git add . && git commit -m "迭代说明"`（参见 `docs/git_tutorial.md`）。
+1. 改 `system_prompt.md` 或 `knowledge/*.md` 或 `app/core/pipeline.py`。
+2. 重启服务（或依赖 `--reload`）。
+3. 跑 `python3 scripts/regression_test.py` 验证。
+4. 失败则定位案例 + 调整。
+5. 通过后 `git add . && git commit -m "迭代说明"`（参见 `docs/git_tutorial.md`）。
 
-## 七、上线到智谱清言
+## 七、部署到腾讯云轻量服务器
 
-详见 `deploy/chatglm_agent_config.md`。要点：
+详见 `deploy/deployment_guide.md`。要点：
 
-1. 登录 chatglm.cn，创建自定义智能体。
-2. 粘贴 `system_prompt.md` 到系统提示词框。
-3. 上传 7 个 `knowledge/*.md` 到知识库。
-4. 勾选工具：联网搜索（必须）、文件/图片上传（必须）、图像理解 GLM-4V（必须）。
-5. 粘贴第 15 节开场白。
-6. 发布并生成分享链接，回填到本 README 顶部。
+1. ssh 到服务器，`git clone` 仓库（或 scp 上传）。
+2. `cp .env.example .env`，填入真实密钥（LLM_API_KEY / SEARCH_API_KEY / LLM_MODEL_VISION）。
+3. `docker build -t judge-net .`
+4. `docker run -d --name judge-net -p 7860:7860 --env-file .env --restart always judge-net`
+5. 配置域名/反代指向 7860 端口（若有域名）。
+6. 验证 `curl http://localhost:7860/healthz` 返回 `{"status":"ok"}`。
 
 ## 八、验证状态
 
@@ -157,7 +179,7 @@ python3 scripts/regression_test.py --report-only
 
 ## 十一、许可证与致谢
 
-- 设计参考往届智谱清言智能体作品 `https://chatglm.cn/share/Fjl8C`。
+- 架构参考同目录 `../scholar_agent`（FastAPI + paratera MaaS + Docker 模式）。
 - 信源分层灵感来自维基百科可靠来源指引与学术同行评议制度。
 - 谬误分类参考维基百科谬误列表。
 - CIB 检测灵感来自 Stanford Internet Observatory。
@@ -175,7 +197,11 @@ python3 scripts/regression_test.py --report-only
 | 5 | `scripts/regression_test.py` 回归脚本 | 完成 |
 | 6 | 本地回归测试 5/5 PASS | 完成 |
 | 7 | `docs/design.md` + `docs/git_tutorial.md` | 完成 |
-| 8 | `deploy/chatglm_agent_config.md` 上线指引 | 完成 |
-| 9 | `README.md` 门面文档 | 完成 |
-| 10 | 智谱清言平台上线 + 回填分享链接 | 待用户执行 |
-| 11 | `git init` + 首次 commit | 待用户确认后执行 |
+| 8 | `deploy/deployment_guide.md` 部署指引 | 完成 |
+| 9 | `app/` FastAPI 后端 | 完成 |
+| 10 | `static/` 单页前端 | 完成 |
+| 11 | `tests/test_pipeline.py` 单元测试 | 完成 |
+| 12 | `Dockerfile` + `requirements.txt` + `.env.example` | 完成 |
+| 13 | `README.md` 门面文档 | 完成 |
+| 14 | 部署到腾讯云轻量服务器 + 回填公网域名 | 待用户执行 |
+| 15 | `git init` + 首次 commit | 待用户确认后执行 |

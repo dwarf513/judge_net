@@ -8,29 +8,35 @@
 
 **目标**：构建一个能在网络争论中担任"法官"角色的智能体，对用户提交的网络对话（文本粘贴或截图）做出清晰、公正、客观、有温度的裁决报告，以促进网络和谐健康为核心原则。
 
-**赛道**：DIY 低代码（智谱清言自定义智能体 + 分享链接交付）。
+**赛道**：DIY 高代码（FastAPI 后端 + 原生前端 + Docker 部署到腾讯云轻量服务器）。
 
 **核心交付物**：
-1. `system_prompt.md` — 智谱清言智能体的主提示词（核心战场）。
-2. `knowledge/*.md` — 上传到智谱清言知识库的 7 个支撑文件。
+1. `system_prompt.md` — 法官人格 + 全流程指令 + 护栏（核心战场）。
+2. `knowledge/*.md` — 7 个支撑文件，由后端注入系统提示词。
 3. `golden_cases/*.md` — 5 个匿名化中文社交语境案例 + 期望输出。
-4. `scripts/regression_test.py` — 用 paratera API 跑金标准回归。
+4. `scripts/regression_test.py` — HTTP 调本地服务跑金标准回归。
 5. `docs/design.md` + `docs/git_tutorial.md` — 设计文档与给用户的 git 教程。
-6. `deploy/chatglm_agent_config.md` — 用户在智谱清言平台上线的操作指引。
-7. `README.md` — 设计哲学 + 智能体分享链接占位。
+6. `deploy/deployment_guide.md` — 腾讯云轻量服务器部署指引。
+7. `app/` — FastAPI 后端（main/config/api/core）。
+8. `static/` — 原生 HTML/JS 单页前端。
+9. `README.md` — 设计哲学 + 在线体验地址占位。
 
 ## 2. 技术栈与外部依赖
 
 | 依赖 | 用途 | 说明 |
 |---|---|---|
-| 智谱清言（chatglm.cn） | 智能体宿主平台 | 用户手动上线，opencode 不代登 |
-| GLM-5.2（paratera MaaS） | 本地回归测试的 reasoning 模型 | 复用 `../scholar_agent/.env` |
-| GLM-4V（paratera MaaS） | 视觉 OCR 验证 | 同上 |
-| Python 3.10+ | 仅用于 `scripts/regression_test.py` | 不构建 Web 服务 |
-| openai SDK | paratera API 是 OpenAI 兼容 | `pip install openai python-dotenv` |
+| FastAPI | Web 框架 | async，适合 LLM 长调用；参考 `../scholar_agent` 模式 |
+| uvicorn | ASGI 服务器 | 端口 7860（与 scholar_agent 一致） |
+| openai SDK | paratera API 是 OpenAI 兼容 | `pip install openai` |
+| httpx | Tavily 搜索 API 调用 | FastAPI 已含 |
+| python-dotenv | 加载 .env | 复用 `../scholar_agent/.env` 的 paratera Key |
+| paratera MaaS | LLM 推理与视觉 | GLM-5.2（reasoning）+ GLM-4V（OCR） |
+| Tavily | 联网检索 | 免费 1000 次/月，专为 LLM 设计 |
+| 腾讯云轻量服务器 | 部署 | Docker run + .env + 公网域名反代 |
+| Python 3.11 | 运行环境 | Dockerfile 基础镜像 |
 | Git | 版本控制 | 用户暂未掌握，需附带教程 |
 
-**不使用**：FastAPI / Flask / LangChain / AutoGen / FAISS / 任何 Web 框架。本项目是低代码路线，所有逻辑在提示词与知识库中。
+**不使用**：智谱清言平台 / LangChain / AutoGen / FAISS / 任何 Web 框架之外的编排库。所有逻辑沉淀在 `system_prompt.md` + `knowledge/*.md` + `app/core/pipeline.py`。
 
 ## 3. 目录布局约定
 
@@ -39,7 +45,7 @@ judge_net/
 ├── AGENTS.md                          # 本文件
 ├── README.md                          # 对外门面
 ├── system_prompt.md                   # 核心：法官人格 + 全流程指令 + 护栏
-├── knowledge/                         # 智谱清言知识库（7 个 .md）
+├── knowledge/                         # 7 个 .md，由后端 prompt_builder 注入
 │   ├── fallacy_taxonomy.md
 │   ├── conflict_typology.md
 │   ├── source_credibility.md
@@ -60,8 +66,33 @@ judge_net/
 ├── docs/
 │   ├── design.md
 │   └── git_tutorial.md
-└── deploy/
-    └── chatglm_agent_config.md
+├── deploy/
+│   └── deployment_guide.md
+├── app/                               # FastAPI 后端
+│   ├── main.py
+│   ├── config.py
+│   ├── api/
+│   │   ├── schemas.py
+│   │   ├── adjudicate.py
+│   │   ├── appeal.py
+│   │   └── reply_script.py
+│   └── core/
+│       ├── llm.py
+│       ├── prompt_builder.py
+│       ├── ocr.py
+│       ├── search.py
+│       ├── segmentation.py
+│       ├── session.py
+│       └── pipeline.py
+├── static/                            # 原生 HTML/JS 单页前端
+│   ├── index.html
+│   ├── style.css
+│   └── app.js
+├── tests/
+│   └── test_pipeline.py
+├── Dockerfile
+├── requirements.txt
+└── .env.example
 ```
 
 **命名约定**：
@@ -117,9 +148,9 @@ python scripts/regression_test.py
 - 至少一案例必须出现明确的"较正确一方"判定（不能各打五十大板）。
 
 ### 6.2 lint / typecheck
-- **无 npm/pip 应用代码**，故无 `npm run lint` / `ruff`。
-- markdown lint：可选，用 `markdownlint-cli`，规则文件 `.markdownlint.json`（如创建）。
-- Python 回归脚本：用 `python -m py_compile scripts/regression_test.py` 做语法检查。
+- **Python 应用代码**：用 `ruff check app/` 做静态检查，`python -m py_compile app/**/*.py` 做语法检查。
+- **Python 回归脚本**：用 `python -m py_compile scripts/regression_test.py`。
+- **markdown lint**：可选，用 `markdownlint-cli`。
 - 若用户后续提供具体 lint 命令，应回填到本节。
 
 ### 6.3 验证流程
@@ -143,8 +174,7 @@ python scripts/regression_test.py
 
 ## 9. opencode 行为约束
 
-- **不创建任何在线服务**，不部署 HF Spaces，不启动 Web 服务器。
-- **不替代用户登录智谱清言**，平台侧操作全部写入 `deploy/chatglm_agent_config.md` 由用户手动执行。
+- **不创建任何 HF Spaces 账号或推送到远程仓库**，部署到腾讯云轻量服务器由用户手动执行（按 `deploy/deployment_guide.md`）。
 - **不主动 commit**，仅在用户明确要求时执行 `git add` + `git commit`。
 - **不修改 `../scholar_agent/`**，只读复用其 `.env`。
 - **每完成一个交付物停顿**，等用户审阅后再继续下一步。

@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>judge_net · 网络冲突法官智能体</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+  <header class="hero">
+    <h1>judge_net</h1>
+    <p class="tagline">网络冲突法官智能体 · 厘清事实、辨别谬误、看见降温路径</p>
+  </header>
+
+  <main>
+    <section id="input-section">
+      <h2>提交争议对话</h2>
+      <form id="adjudicate-form" enctype="multipart/form-data">
+        <label for="dialogue">对话原文（粘贴文本，可选）</label>
+        <textarea id="dialogue" name="dialogue" rows="8" placeholder="粘贴一段网络对话，按发言方分段。如：&#10;@用户A：...&#10;&#10;@用户B：..."></textarea>
+
+        <label for="images">截图上传（可选，多张按时间顺序）</label>
+        <input type="file" id="images" name="images" accept="image/*" multiple>
+        <div id="image-preview" class="image-preview"></div>
+
+        <button type="submit" id="submit-btn">提交裁决</button>
+        <span id="submit-status" class="status"></span>
+      </form>
+    </section>
+
+    <section id="result-section" hidden>
+      <h2>裁决报告</h2>
+      <div class="session-info">
+        <span id="session-id-display"></span>
+        <span id="search-info"></span>
+      </div>
+      <div id="verdict-rendered" class="verdict-content"></div>
+      <div class="actions">
+        <button id="appeal-btn" type="button">提起上诉</button>
+        <button id="reply-script-btn" type="button">请求应答话术</button>
+      </div>
+    </section>
+
+    <section id="appeal-form" hidden>
+      <h2>提起上诉</h2>
+      <form id="appeal-submit-form">
+        <label for="appealed-section">不服的具体条目</label>
+        <input type="text" id="appealed-section" placeholder="如：四、事实核查表第 2 条" required>
+        <label for="appeal-reason">新证据 / 异议理由</label>
+        <textarea id="appeal-reason" rows="4" placeholder="提供新证据或具体异议理由" required></textarea>
+        <button type="submit">提交上诉</button>
+        <span id="appeal-status" class="status"></span>
+      </form>
+      <div id="appeal-result" hidden></div>
+    </section>
+
+    <section id="reply-script-section" hidden>
+      <h2>应答话术（opt-in）</h2>
+      <div id="opt-in-info"></div>
+      <form id="reply-script-form">
+        <label for="style">话术风格</label>
+        <select id="style">
+          <option value="降温退场">降温退场（默认推荐）</option>
+          <option value="直接说理">直接说理</option>
+          <option value="反讽克制">反讽克制</option>
+          <option value="委婉纠正">委婉纠正</option>
+          <option value="引经据典">引经据典</option>
+        </select>
+        <label for="extra">额外说明（可选）</label>
+        <textarea id="extra" rows="3" placeholder="如：希望语气更克制 / 重点反驳对方哪条"></textarea>
+        <button type="submit">生成话术</button>
+        <span id="reply-script-status" class="status"></span>
+      </form>
+      <div id="reply-script-result" hidden></div>
+    </section>
+  </main>
+
+  <footer>
+    <p>judge_net · DIY 高代码赛道 · 不各打五十大板，不冒充真理裁判</p>
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

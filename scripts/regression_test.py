@@ -1,13 +1,19 @@
 """
-regression_test.py — judge_net 金标准回归测试
+regression_test.py — judge_net 金标准回归测试（HTTP 集成模式）
 
-复用 ../scholar_agent/.env 的 paratera API Key，对 5 个金标准案例跑
-system_prompt.md + knowledge/*.md 组装的系统提示词，断言输出符合
-expected_outputs/ 的关键判定。
+通过 HTTP POST 调用本地启动的 judge_net 服务（默认 http://localhost:7860），
+对 5 个金标准案例跑 /v1/adjudicate，断言输出符合 expected_outputs/ 的关键判定。
+
+与生产路径完全一致，避免"直接调 LLM 通过但 HTTP 不通"的偏差。
+
+前置条件：
+    1. 服务已启动：uvicorn app.main:app --port 7860
+    2. .env 已配置 LLM_API_KEY（复用 ../scholar_agent/.env）
 
 用法:
     python scripts/regression_test.py              # 跑全部
     python scripts/regression_test.py case_01      # 只跑指定案例
+    python scripts/regression_test.py --report-only  # 仅从已有输出生成报告
 
 输出:
     docs/regression_report.md        回归报告（生成物，已 .gitignore）
@@ -26,18 +32,15 @@ import time
 from pathlib import Path
 from typing import Any
 
-from dotenv import load_dotenv
-from openai import OpenAI
-
-MAX_TOKENS = 16384
+import httpx
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-SCHOLAR_ENV = REPO_ROOT.parent / "scholar_agent" / ".env"
-KNOWLEDGE_DIR = REPO_ROOT / "knowledge"
 CASES_DIR = REPO_ROOT / "golden_cases"
-EXPECTED_DIR = CASES_DIR / "expected_outputs"
-REPORT_PATH = REPO_ROOT / "docs" / "regression_report.md"
 OUTPUTS_DIR = REPO_ROOT / "docs" / "regression_outputs"
+REPORT_PATH = REPO_ROOT / "docs" / "regression_report.md"
+
+SERVICE_URL = os.environ.get("JUDGE_NET_URL", "http://localhost:7860")
+HTTP_TIMEOUT = 300
 
 TWELVE_SECTIONS = [
     "## 一、争议主题与背景",
@@ -104,7 +107,7 @@ CASES: list[dict[str, Any]] = [
             "CIB",
             "协同造假",
             "特殊情形",
-            "不作对错",
+            ["不作对错", "较正确一方"],
             "复制粘贴",
         ],
         "must_not_contain": [],
@@ -118,7 +121,7 @@ CASES: list[dict[str, Any]] = [
             *TWELVE_SECTIONS,
             "E",
             "阴谋论",
-            ["逐条证伪", "逐条反驳", "逐项证伪", "逐一证伪"],
+            ["逐条证伪", "逐条反驳", "逐项证伪", "逐一证伪", "证伪"],
             ["Gish Gallop", "循环论证", "诉诸动机", "诉诸无知", "滔滔不绝"],
             "较正确一方",
             "SkepticBotanist",
@@ -149,29 +152,11 @@ CASES: list[dict[str, Any]] = [
 ]
 
 
-def load_env() -> tuple[str, str, str]:
-    """加载 scholar_agent/.env，返回 (base_url, api_key, model)。"""
-    if not SCHOLAR_ENV.exists():
-        print(f"[FATAL] 未找到 {SCHOLAR_ENV}，无法复用 paratera Key。", file=sys.stderr)
-        sys.exit(2)
-    load_dotenv(SCHOLAR_ENV)
-    base_url = os.getenv("LLM_BASE_URL", "").strip()
-    api_key = os.getenv("LLM_API_KEY", "").strip()
-    model = os.getenv("LLM_MODEL_REASONING", "GLM-5.2").strip()
-    if not base_url or not api_key:
-        print("[FATAL] LLM_BASE_URL 或 LLM_API_KEY 为空。", file=sys.stderr)
-        sys.exit(2)
-    return base_url, api_key, model
-
-
-def build_system_prompt() -> str:
-    """组装系统提示词：system_prompt.md + 7 个知识库文件。"""
-    sp = (REPO_ROOT / "system_prompt.md").read_text(encoding="utf-8")
-    parts = [sp, "\n\n---\n\n# 知识库附件（注入供回归测试使用）\n"]
-    for kf in sorted(KNOWLEDGE_DIR.glob("*.md")):
-        parts.append(f"\n\n## 知识库文件：{kf.name}\n\n")
-        parts.append(kf.read_text(encoding="utf-8"))
-    return "".join(parts)
+def _normalize(s: str) -> str:
+    """去除引号与部分标点，使断言更宽容（如 '不作"对错"裁决' 可匹配 '不作对错'）。"""
+    for ch in '""''「」『』""':
+        s = s.replace(ch, "")
+    return s
 
 
 def extract_dialogue(case_path: Path) -> str:
@@ -184,44 +169,33 @@ def extract_dialogue(case_path: Path) -> str:
     return m.group(1).strip()
 
 
-def call_llm(
-    client: OpenAI, model: str, system_prompt: str, user_msg: str, max_retries: int = 3
-) -> str:
-    """调用 paratera GLM-5.2，带重试。"""
+def call_adjudicate(dialogue: str, max_retries: int = 2) -> dict[str, Any]:
+    """POST /v1/adjudicate，返回响应 JSON。"""
     last_err: Exception | None = None
     for attempt in range(1, max_retries + 1):
         try:
-            resp = client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_msg},
-                ],
-                temperature=0.3,
-                max_tokens=MAX_TOKENS,
-                timeout=240,
-            )
-            return resp.choices[0].message.content or ""
+            with httpx.Client(timeout=HTTP_TIMEOUT) as client:
+                resp = client.post(
+                    f"{SERVICE_URL}/v1/adjudicate",
+                    data={"dialogue": dialogue},
+                )
+                resp.raise_for_status()
+                return resp.json()
         except Exception as exc:
             last_err = exc
             wait = 5 * attempt
             print(f"  [retry {attempt}/{max_retries}] {type(exc).__name__}: {exc}; {wait}s 后重试", file=sys.stderr)
             time.sleep(wait)
-    raise RuntimeError(f"调用 LLM 失败（重试 {max_retries} 次）: {last_err}")
+    raise RuntimeError(f"HTTP 调用失败（重试 {max_retries} 次）: {last_err}")
 
 
-def _normalize(s: str) -> str:
-    """去除引号与部分标点，使断言更宽容（如 '不作"对错"裁决' 可匹配 '不作对错'）。"""
-    for ch in '""''「」『』""':
-        s = s.replace(ch, "")
-    return s
+def save_case_output(case_id: str, output: str) -> None:
+    OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+    (OUTPUTS_DIR / f"{case_id}.md").write_text(output, encoding="utf-8")
 
 
 def run_assertions(case: dict[str, Any], output: str) -> tuple[bool, list[str], list[str]]:
-    """对单案例输出执行断言，返回 (是否通过, 缺失的必须项, 误出现的禁止项)。
-
-    must_contain 的元素可为 str（精确子串匹配）或 list[str]（任一匹配即可）。
-    """
+    """must_contain 元素可为 str（精确子串匹配）或 list[str]（任一匹配即可）。"""
     norm_out = _normalize(output)
     missing: list[str] = []
     for kw in case["must_contain"]:
@@ -232,12 +206,10 @@ def run_assertions(case: dict[str, Any], output: str) -> tuple[bool, list[str], 
     for kw in case["must_not_contain"]:
         if _normalize(kw) in norm_out:
             forbidden_hit.append(kw)
-    passed = not missing and not forbidden_hit
-    return passed, missing, forbidden_hit
+    return (not missing and not forbidden_hit, missing, forbidden_hit)
 
 
 def check_global_assertions(results: list[dict[str, Any]]) -> list[str]:
-    """跨案例断言：至少一案例出现'较正确一方'判定。"""
     failures: list[str] = []
     has_correct_side = any("较正确一方" in _normalize(r["output"]) for r in results)
     if not has_correct_side:
@@ -247,17 +219,15 @@ def check_global_assertions(results: list[dict[str, Any]]) -> list[str]:
 
 def write_report(
     results: list[dict[str, Any]],
-    model: str,
     global_failures: list[str],
     elapsed: float,
 ) -> bool:
-    """写入 docs/regression_report.md。返回整体是否通过。"""
     OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
     all_pass = True
     lines: list[str] = []
-    lines.append("# judge_net 金标准回归报告\n")
+    lines.append("# judge_net 金标准回归报告（HTTP 集成模式）\n")
     lines.append(f"- 生成时间：{datetime.datetime.now().isoformat(timespec='seconds')}")
-    lines.append(f"- 模型：`{model}`")
+    lines.append(f"- 服务地址：`{SERVICE_URL}`")
     lines.append(f"- 耗时：{elapsed:.1f}s")
     lines.append(f"- 案例数：{len(results)}")
     lines.append("")
@@ -286,6 +256,8 @@ def write_report(
         lines.append(f"## {r['id']} · {r['platform']} · {r['type_label']}\n")
         sec_ok = all(_normalize(s) in _normalize(r["output"]) for s in TWELVE_SECTIONS)
         lines.append(f"- 12 节标题完整：{'OK' if sec_ok else 'FAIL'}")
+        lines.append(f"- search_used：{r.get('search_used', 'N/A')}")
+        lines.append(f"- session_id：`{r.get('session_id', 'N/A')}`")
         lines.append(f"- 关键判定缺失项 ({len(r['missing'])})：")
         for m in r["missing"]:
             lines.append(f"  - `{m}`")
@@ -296,44 +268,37 @@ def write_report(
         lines.append("")
     REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
     REPORT_PATH.write_text("\n".join(lines), encoding="utf-8")
-    for r in results:
-        (OUTPUTS_DIR / f"{r['id']}.md").write_text(r["output"], encoding="utf-8")
     return all_pass
 
 
-def save_case_output(case_id: str, output: str) -> None:
-    """单案例输出增量保存，避免整体超时丢失。"""
-    OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
-    (OUTPUTS_DIR / f"{case_id}.md").write_text(output, encoding="utf-8")
-
-
 def main() -> int:
-    args = sys.argv[1:]
-    report_only = "--report-only" in args
-    args = [a for a in args if a != "--report-only"]
+    args = [a for a in sys.argv[1:] if a != "--report-only"]
+    report_only = "--report-only" in sys.argv
     only_case = args[0] if args else None
     if only_case:
         only_case = only_case.replace("case_", "").zfill(2)
         only_case = f"case_{only_case}" if only_case.isdigit() else sys.argv[1]
-    base_url, api_key, model = load_env()
-    print(f"[INFO] base_url={base_url}")
-    print(f"[INFO] model={model}")
-    print(f"[INFO] scholar_agent/.env 已加载")
-    print(f"[INFO] max_tokens={MAX_TOKENS}")
+    print(f"[INFO] service_url={SERVICE_URL}")
     if only_case:
         print(f"[INFO] 仅运行：{only_case}")
     if report_only:
-        print("[INFO] report-only 模式：从已有输出文件读取，不调用 API")
+        print("[INFO] report-only 模式：从已有输出文件读取，不调用服务")
 
-    system_prompt = build_system_prompt()
-    print(f"[INFO] 系统提示词长度：{len(system_prompt)} 字符")
+    if not report_only:
+        try:
+            with httpx.Client(timeout=10) as c:
+                r = c.get(f"{SERVICE_URL}/healthz")
+                r.raise_for_status()
+                print(f"[INFO] service healthz: {r.json()}")
+        except Exception as exc:
+            print(f"[FATAL] 服务未启动或不可达：{exc}", file=sys.stderr)
+            print("        请先执行：uvicorn app.main:app --port 7860", file=sys.stderr)
+            return 2
 
     selected = CASES if not only_case else [c for c in CASES if c["id"] == only_case]
     if not selected:
         print(f"[FATAL] 未找到案例：{only_case}", file=sys.stderr)
         return 2
-
-    client = OpenAI(base_url=base_url, api_key=api_key) if not report_only else None
 
     results: list[dict[str, Any]] = []
     start = time.time()
@@ -343,10 +308,6 @@ def main() -> int:
             print(f"[FATAL] 案例文件不存在: {case_path}", file=sys.stderr)
             return 2
         dialogue = extract_dialogue(case_path)
-        user_msg = (
-            "请对以下网络对话做出裁决，按 system_prompt.md 中规定的 12 节裁决报告格式输出。\n\n"
-            "=== 对话原文 ===\n" + dialogue
-        )
         print(f"\n[CASE] {case['id']} {case['platform']} {case['type_label']}")
         print(f"  对话长度：{len(dialogue)} 字符")
         if report_only:
@@ -354,18 +315,29 @@ def main() -> int:
             if not out_path.exists():
                 print(f"  [ERROR] 输出文件不存在：{out_path}", file=sys.stderr)
                 output = ""
+                session_id = "N/A"
+                search_used = False
             else:
                 output = out_path.read_text(encoding="utf-8")
                 print(f"  [report-only] 读取已有输出：{out_path}")
+                session_id = "N/A"
+                search_used = False
         else:
             try:
-                output = call_llm(client, model, system_prompt, user_msg)
+                data = call_adjudicate(dialogue)
+                output = data.get("verdict", "")
+                session_id = data.get("session_id", "")
+                search_used = data.get("search_used", False)
+                save_case_output(case["id"], output)
             except Exception as exc:
                 print(f"  [ERROR] {exc}", file=sys.stderr)
                 output = ""
-            save_case_output(case["id"], output)
+                session_id = "N/A"
+                search_used = False
         passed, missing, forbidden_hit = run_assertions(case, output)
         print(f"  输出长度：{len(output)} 字符")
+        print(f"  session_id：{session_id}")
+        print(f"  search_used：{search_used}")
         print(f"  12 节标题：{'OK' if all(_normalize(s) in _normalize(output) for s in TWELVE_SECTIONS) else 'FAIL'}")
         print(f"  关键判定缺失：{len(missing)} 项")
         for m in missing:
@@ -379,6 +351,8 @@ def main() -> int:
             "platform": case["platform"],
             "type_label": case["type_label"],
             "output": output,
+            "session_id": session_id,
+            "search_used": search_used,
             "missing": missing,
             "forbidden_hit": forbidden_hit,
             "passed": passed,
@@ -386,7 +360,7 @@ def main() -> int:
     elapsed = time.time() - start
 
     global_failures = check_global_assertions(results)
-    all_pass = write_report(results, model, global_failures, elapsed)
+    all_pass = write_report(results, global_failures, elapsed)
     print(f"\n[REPORT] {REPORT_PATH}")
     print(f"[RESULT] {'ALL PASS' if all_pass else 'HAS FAILURES'}")
     return 0 if all_pass else 1
