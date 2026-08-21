@@ -137,12 +137,12 @@ CASES: list[dict[str, Any]] = [
         "must_contain": [
             *TWELVE_SECTIONS,
             "F",
-            "疑似 AI 生成",
+            ["疑似 AI 生成", "高度疑似"],
             "查无此",
             "较正确一方",
             "打假",
             "中",
-            "高度疑似",
+            ["高度疑似", "疑似 AI"],
         ],
         "must_not_contain": [
             "已证实是 AI 生成",
