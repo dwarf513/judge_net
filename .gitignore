@@ -1,6 +1,8 @@
-# 环境与密钥
+# 环境与密钥（.env.example 是占位文件，应入 git）
 .env
-.env.*
+.env.local
+.env.production
+!.env.example
 
 # Python
 __pycache__/
