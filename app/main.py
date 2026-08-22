@@ -7,9 +7,11 @@ from __future__ import annotations
 
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
@@ -59,6 +61,13 @@ def create_app() -> FastAPI:
 
     @app.get("/")
     async def root():
+        index_path = s.static_dir / "index.html"
+        if index_path.is_file():
+            return FileResponse(index_path, media_type="text/html")
+        return {"name": "judge_net", "version": "0.2.0", "error": "static/index.html not found"}
+
+    @app.get("/info")
+    async def info():
         return {
             "name": "judge_net",
             "version": "0.2.0",
