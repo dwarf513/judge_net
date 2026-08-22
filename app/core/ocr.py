@@ -57,7 +57,7 @@ def _extract_json(text: str) -> dict[str, Any]:
 
 async def ocr_image(image_bytes: bytes) -> dict[str, Any]:
     """单图 OCR + 角色分割。返回结构化 dict。"""
-    raw = await vision_completion(image_bytes, OCR_PROMPT, max_tokens=4096)
+    raw = await vision_completion(image_bytes, OCR_PROMPT, max_tokens=2048)
     return _extract_json(raw)
 
 

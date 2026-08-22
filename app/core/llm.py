@@ -67,6 +67,7 @@ async def vision_completion(
     """视觉模型补全。输入图像 bytes + 文本指令，返回文本。
 
     用于截图 OCR + 发言方角色分割。
+    注意：paratera GLM-4V 限制 max_tokens 范围 [1, 2048]。
     """
     s = get_settings()
     if not s.llm_model_vision:
@@ -88,7 +89,7 @@ async def vision_completion(
                 ],
             }
         ],
-        max_tokens=max_tokens,
+        max_tokens=min(max_tokens, 2048),
         temperature=0.1,
     )
     return resp.choices[0].message.content or ""
