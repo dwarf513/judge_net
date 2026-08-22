@@ -2,7 +2,7 @@
 
 > 网络争吵的公正裁决者：厘清事实、辨别谬误、看见降温路径，促进网络和谐健康。
 
-**在线体验地址**：<!-- 待回填：按 deploy/deployment_guide.md 部署到腾讯云轻量服务器后，回填公网域名 -->
+**在线体验地址**：http://43.143.218.8:7860
 
 **赛道**：DIY 高代码（FastAPI 后端 + 原生前端 + Docker 部署到腾讯云轻量服务器）
 
@@ -203,5 +203,5 @@ python3 scripts/regression_test.py --report-only   # 仅从已有输出生成报
 | 11 | `tests/test_pipeline.py` 单元测试 | 完成 |
 | 12 | `Dockerfile` + `requirements.txt` + `.env.example` | 完成 |
 | 13 | `README.md` 门面文档 | 完成 |
-| 14 | 部署到腾讯云轻量服务器 + 回填公网域名 | 待用户执行 |
-| 15 | `git init` + 首次 commit | 待用户确认后执行 |
+| 14 | 部署到腾讯云轻量服务器 + 回填公网域名 | 完成 |
+| 15 | `git init` + 首次 commit | 完成 |
