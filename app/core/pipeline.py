@@ -68,15 +68,18 @@ QUERY_EXTRACTION_PROMPT = """从下面这段网络争议对话中，抽取 1-3 �
 
 
 async def _llm_extract_queries(dialogue: str) -> list[str]:
-    """用 LLM 抽取 1-3 个检索查询词（替代正则，更精准）。"""
+    """用 LLM 抽取 1-3 个检索查询词（替代正则，更精准）。
+
+    使用 DeepSeek-V3.2-Instruct（1.5s 快速），不用 GLM-5-Turbo（65s 慢，疑似走 reasoning）。
+    """
     from app.core.llm import chat_completion
     prompt = QUERY_EXTRACTION_PROMPT.format(dialogue=dialogue[:3000])
     try:
         raw = await chat_completion(
-            system_prompt="你是一个事实查询词抽取器。严格按 JSON 输出。",
+            system_prompt="你是一个事实查询词抽取器。只输出JSON，不要其他文字。",
             user_msg=prompt,
-            model="GLM-5-Turbo",
-            max_tokens=256,
+            model="DeepSeek-V3.2-Instruct",
+            max_tokens=128,
             temperature=0.1,
         )
         m = re.search(r'\{[\s\S]*\}', raw)
@@ -109,6 +112,8 @@ async def adjudicate(
     输入：对话文本（可空）+ 截图列表（可空），至少一项。
     输出：{session_id, dialogue_used, verdict, search_used, notes}
     """
+    import asyncio as _asyncio
+
     if not dialogue and not images:
         return {"error": "必须提供对话文本或截图"}
 
@@ -116,32 +121,55 @@ async def adjudicate(
     search_used = False
     search_context = ""
 
+    # OCR 阶段（带超时，避免卡死）
     if images and not dialogue:
-        ocr_result = await ocr_images(images)
-        dialogue = format_dialogue_text(ocr_result)
+        try:
+            ocr_result = await _asyncio.wait_for(ocr_images(images), timeout=180)
+            dialogue = format_dialogue_text(ocr_result)
+        except _asyncio.TimeoutError:
+            return {"error": "截图 OCR 超时（180s），请尝试更清晰的截图或改用文本粘贴"}
+        except Exception as exc:
+            return {"error": f"截图 OCR 失败：{type(exc).__name__}: {exc}"}
     elif images and dialogue:
-        ocr_result = await ocr_images(images)
-        ocr_text = format_dialogue_text(ocr_result)
-        dialogue = f"{dialogue}\n\n=== 截图识别补充 ===\n{ocr_text}"
+        try:
+            ocr_result = await _asyncio.wait_for(ocr_images(images), timeout=180)
+            ocr_text = format_dialogue_text(ocr_result)
+            dialogue = f"{dialogue}\n\n=== 截图识别补充 ===\n{ocr_text}"
+        except _asyncio.TimeoutError:
+            print("[pipeline] OCR timeout, continue with text only", flush=True)
+        except Exception as exc:
+            print(f"[pipeline] OCR failed: {exc}, continue with text only", flush=True)
 
     user_msg = ADJUDICATE_USER_PROMPT.format(dialogue=dialogue)
 
+    # 联网检索阶段（LLM 抽词 + 并发搜索，带超时）
     if _needs_fact_check(dialogue):
-        queries = await _llm_extract_queries(dialogue)
-        if queries:
-            import asyncio as _asyncio
-            tasks = [search(q, max_results=3) for q in queries]
-            try:
-                search_results_list = await _asyncio.gather(*tasks, return_exceptions=True)
+        try:
+            queries = await _asyncio.wait_for(_llm_extract_queries(dialogue), timeout=30)
+            if queries:
+                tasks = [search(q, max_results=3) for q in queries]
+                search_results_list = await _asyncio.wait_for(
+                    _asyncio.gather(*tasks, return_exceptions=True),
+                    timeout=60,
+                )
                 search_results = [r for r in search_results_list if isinstance(r, dict)]
                 if search_results:
                     search_used = True
                     search_context = format_search_results(search_results)
                     user_msg += f"\n\n=== 联网检索补充 ===\n{search_context}"
-            except Exception as exc:
-                print(f"[pipeline] search batch failed: {exc}", flush=True)
+        except _asyncio.TimeoutError:
+            print("[pipeline] search stage timeout, continue without search", flush=True)
+        except Exception as exc:
+            print(f"[pipeline] search failed: {exc}", flush=True)
 
-    verdict = await chat_completion(system_prompt, user_msg)
+    # 主裁决（带超时，避免 reasoning 模式无限思考）
+    try:
+        verdict = await _asyncio.wait_for(
+            chat_completion(system_prompt, user_msg),
+            timeout=300,
+        )
+    except _asyncio.TimeoutError:
+        return {"error": "主裁决生成超时（300s），请稍后重试或简化对话内容"}
 
     session = get_session_store().create(dialogue=dialogue, verdict=verdict)
 

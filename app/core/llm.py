@@ -20,14 +20,14 @@ def get_client() -> AsyncOpenAI:
     return AsyncOpenAI(
         base_url=s.llm_base_url,
         api_key=s.llm_api_key,
-        timeout=240,
+        timeout=120,
     )
 
 
 @retry(
     reraise=True,
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=5, min=5, max=30),
+    stop=stop_after_attempt(2),
+    wait=wait_exponential(multiplier=3, min=3, max=15),
 )
 async def chat_completion(
     system_prompt: str,
@@ -54,8 +54,8 @@ async def chat_completion(
 
 @retry(
     reraise=True,
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=5, min=5, max=30),
+    stop=stop_after_attempt(2),
+    wait=wait_exponential(multiplier=3, min=3, max=15),
 )
 async def vision_completion(
     image_bytes: bytes,

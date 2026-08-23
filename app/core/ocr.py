@@ -62,11 +62,18 @@ async def ocr_image(image_bytes: bytes) -> dict[str, Any]:
 
 
 async def ocr_images(images: list[bytes]) -> dict[str, Any]:
-    """多图 OCR，结果按时间顺序拼接，发言方去重，相同内容去重。"""
+    """多图 OCR，结果按时间顺序拼接，发言方去重，相同内容去重。
+
+    多图并发调用 GLM-4V，避免串行等待。
+    """
     if not images:
         return {"speakers": [], "messages": [], "notes": "无图片"}
     if len(images) == 1:
         return await ocr_image(images[0])
+
+    import asyncio
+    tasks = [ocr_image(img) for img in images]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
 
     merged_speakers: list[dict[str, Any]] = []
     merged_messages: list[dict[str, Any]] = []
@@ -74,8 +81,10 @@ async def ocr_images(images: list[bytes]) -> dict[str, Any]:
     order_offset = 0
     notes_parts: list[str] = []
 
-    for idx, img in enumerate(images, 1):
-        result = await ocr_image(img)
+    for idx, result in enumerate(results, 1):
+        if isinstance(result, Exception):
+            notes_parts.append(f"图{idx} OCR 失败: {type(result).__name__}: {result}")
+            continue
         for sp in result.get("speakers", []):
             if sp not in merged_speakers:
                 merged_speakers.append(sp)
