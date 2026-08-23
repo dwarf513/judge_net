@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 
+import json
 import re
 from typing import Any
 
@@ -53,8 +54,44 @@ def _needs_fact_check(verdict_or_dialogue: str) -> bool:
     return any(re.search(p, verdict_or_dialogue) for p in FACT_CHECK_TRIGGER_PATTERNS)
 
 
-def _extract_search_queries(dialogue: str) -> list[str]:
-    """从对话中抽取候选检索查询（人名、事件、数据）。"""
+QUERY_EXTRACTION_PROMPT = """从下面这段网络争议对话中，抽取 1-3 个最适合用于联网检索的事实性查询词。
+
+要求：
+1. 抽取具体的事实实体：人名+事件、赛事名+年份、机构+决策、政策名+日期等。
+2. 避免抽象词（如"事件""实验"等单独词），优先具体组合（如"阿根廷 vs 埃及 2026 世界杯""LK-99 复现""阿波罗登月 阴谋论"）。
+3. 若对话仅含价值偏好/生活琐事（如"粽子甜咸"），返回空数组。
+4. 严格输出 JSON：{{"queries": ["query1", "query2"]}}，不要其他解释。
+
+=== 对话原文 ===
+{dialogue}
+"""
+
+
+async def _llm_extract_queries(dialogue: str) -> list[str]:
+    """用 LLM 抽取 1-3 个检索查询词（替代正则，更精准）。"""
+    from app.core.llm import chat_completion
+    prompt = QUERY_EXTRACTION_PROMPT.format(dialogue=dialogue[:3000])
+    try:
+        raw = await chat_completion(
+            system_prompt="你是一个事实查询词抽取器。严格按 JSON 输出。",
+            user_msg=prompt,
+            model="GLM-5-Turbo",
+            max_tokens=256,
+            temperature=0.1,
+        )
+        m = re.search(r'\{[\s\S]*\}', raw)
+        if not m:
+            return []
+        data = json.loads(m.group(0))
+        queries = [q.strip() for q in data.get("queries", []) if q and q.strip()]
+        return queries[:3]
+    except Exception as exc:
+        print(f"[pipeline] LLM extract queries failed: {exc}", flush=True)
+        return _extract_search_queries_legacy(dialogue)
+
+
+def _extract_search_queries_legacy(dialogue: str) -> list[str]:
+    """正则兜底：当 LLM 抽取失败时使用。"""
     queries: list[str] = []
     for m in re.finditer(r"([\u4e00-\u9fa5a-zA-Z]{2,30}(?:事件|实验|复现|数据|研究|声明|政策|法规))", dialogue):
         q = m.group(1).strip()
@@ -90,12 +127,19 @@ async def adjudicate(
     user_msg = ADJUDICATE_USER_PROMPT.format(dialogue=dialogue)
 
     if _needs_fact_check(dialogue):
-        queries = _extract_search_queries(dialogue)
+        queries = await _llm_extract_queries(dialogue)
         if queries:
-            search_results = await search(queries[0], max_results=5)
-            search_used = True
-            search_context = format_search_results([search_results])
-            user_msg += f"\n\n=== 联网检索补充 ===\n{search_context}"
+            import asyncio as _asyncio
+            tasks = [search(q, max_results=3) for q in queries]
+            try:
+                search_results_list = await _asyncio.gather(*tasks, return_exceptions=True)
+                search_results = [r for r in search_results_list if isinstance(r, dict)]
+                if search_results:
+                    search_used = True
+                    search_context = format_search_results(search_results)
+                    user_msg += f"\n\n=== 联网检索补充 ===\n{search_context}"
+            except Exception as exc:
+                print(f"[pipeline] search batch failed: {exc}", flush=True)
 
     verdict = await chat_completion(system_prompt, user_msg)
 

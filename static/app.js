@@ -1,10 +1,57 @@
 const API_BASE = window.location.origin;
 let currentSessionId = null;
+let progressTimer = null;
 
 const $ = (id) => document.getElementById(id);
 
-$("adjudicate-form").addEventListener("submit", async (e) => {
-  e.preventDefault();
+const PROGRESS_STAGES = [
+  { stage: "正在识别发言方与对话结构", pct: 15, delay: 3000 },
+  { stage: "正在检索权威信源", pct: 35, delay: 8000 },
+  { stage: "正在核查事实主张", pct: 55, delay: 15000 },
+  { stage: "正在辨析逻辑谬误", pct: 75, delay: 25000 },
+  { stage: "正在分析情绪与修辞", pct: 88, delay: 40000 },
+  { stage: "正在生成裁决报告", pct: 95, delay: 60000 },
+];
+
+function startProgress() {
+  const area = $("progress-area");
+  const fill = $("progress-fill");
+  const stage = $("progress-stage");
+  area.hidden = false;
+  fill.style.width = "5%";
+  stage.textContent = "提交中...";
+
+  let elapsed = 0;
+  let stageIdx = 0;
+  progressTimer = setInterval(() => {
+    elapsed += 1000;
+    const current = PROGRESS_STAGES[stageIdx];
+    if (current && elapsed >= current.delay) {
+      stage.textContent = current.stage;
+      fill.style.width = current.pct + "%";
+      stageIdx = Math.min(stageIdx + 1, PROGRESS_STAGES.length - 1);
+    }
+  }, 1000);
+}
+
+function stopProgress(success) {
+  if (progressTimer) {
+    clearInterval(progressTimer);
+    progressTimer = null;
+  }
+  const area = $("progress-area");
+  const fill = $("progress-fill");
+  const stage = $("progress-stage");
+  if (success) {
+    fill.style.width = "100%";
+    stage.textContent = "裁决完成";
+  }
+  setTimeout(() => { area.hidden = true; }, 1500);
+}
+
+$("adjudicate-form")?.addEventListener("submit", (e) => e.preventDefault());
+
+$("submit-btn").addEventListener("click", async () => {
   const dialogue = $("dialogue").value.trim();
   const images = $("images").files;
 
@@ -15,64 +62,124 @@ $("adjudicate-form").addEventListener("submit", async (e) => {
 
   const formData = new FormData();
   if (dialogue) formData.append("dialogue", dialogue);
-  for (const img of images) {
-    formData.append("images", img);
-  }
+  for (const img of images) formData.append("images", img);
 
   $("submit-btn").disabled = true;
-  showStatus("submit-status", "正在生成裁决报告（可能耗时 30-90 秒）...", "info");
+  showStatus("submit-status", "", "");
+  startProgress();
 
   try {
-    const resp = await fetch(`${API_BASE}/v1/adjudicate`, {
-      method: "POST",
-      body: formData,
-    });
+    const resp = await fetch(`${API_BASE}/v1/adjudicate`, { method: "POST", body: formData });
     const data = await resp.json();
     if (!resp.ok) {
       showStatus("submit-status", `错误：${data.error || resp.statusText}`, "error");
+      stopProgress(false);
       return;
     }
     currentSessionId = data.session_id;
     $("session-id-display").textContent = `会话 ID：${data.session_id}`;
     $("search-info").textContent = data.search_used
-      ? "已注入联网检索结果"
+      ? "已注入联网检索结果（Tavily）"
       : "仅基于模型训练知识";
     $("verdict-rendered").innerHTML = marked.parse(data.verdict);
     $("result-section").hidden = false;
+    $("result-section").scrollIntoView({ behavior: "smooth", block: "start" });
     showStatus("submit-status", "裁决完成", "success");
+    stopProgress(true);
   } catch (err) {
     showStatus("submit-status", `网络错误：${err}`, "error");
+    stopProgress(false);
   } finally {
     $("submit-btn").disabled = false;
   }
 });
 
-$("images").addEventListener("change", (e) => {
+function renderImagePreview(files) {
   const preview = $("image-preview");
   preview.innerHTML = "";
-  for (const file of e.target.files) {
+  Array.from(files).forEach((file, idx) => {
+    const item = document.createElement("div");
+    item.className = "image-preview-item";
     const img = document.createElement("img");
     img.src = URL.createObjectURL(file);
     img.onload = () => URL.revokeObjectURL(img.src);
-    preview.appendChild(img);
+    const badge = document.createElement("span");
+    badge.className = "badge";
+    badge.textContent = idx + 1;
+    const name = document.createElement("div");
+    name.className = "name";
+    name.textContent = file.name;
+    item.appendChild(img);
+    item.appendChild(badge);
+    item.appendChild(name);
+    preview.appendChild(item);
+  });
+}
+
+$("images").addEventListener("change", (e) => {
+  renderImagePreview(e.target.files);
+});
+
+const uploadZone = $("upload-zone");
+["dragenter", "dragover"].forEach(evt => {
+  uploadZone.addEventListener(evt, (e) => {
+    e.preventDefault();
+    uploadZone.classList.add("dragover");
+  });
+});
+["dragleave", "drop"].forEach(evt => {
+  uploadZone.addEventListener(evt, (e) => {
+    e.preventDefault();
+    uploadZone.classList.remove("dragover");
+  });
+});
+uploadZone.addEventListener("drop", (e) => {
+  const files = e.dataTransfer.files;
+  if (files.length > 0) {
+    $("images").files = files;
+    renderImagePreview(files);
   }
 });
 
-$("appeal-btn").addEventListener("click", () => {
-  $("appeal-form").hidden = false;
-  $("appeal-form").scrollIntoView({ behavior: "smooth" });
+$("copy-btn").addEventListener("click", async () => {
+  const text = $("verdict-rendered").innerText;
+  try {
+    await navigator.clipboard.writeText(text);
+    showStatus("submit-status", "已复制到剪贴板", "success");
+    setTimeout(() => showStatus("submit-status", "", ""), 2000);
+  } catch (err) {
+    showStatus("submit-status", `复制失败：${err}`, "error");
+  }
 });
 
-$("appeal-submit-form").addEventListener("submit", async (e) => {
-  e.preventDefault();
+$("download-btn").addEventListener("click", () => {
+  const text = $("verdict-rendered").innerText;
+  const blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `judge_net_verdict_${Date.now()}.md`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+$("appeal-btn").addEventListener("click", () => {
+  $("appeal-panel").hidden = false;
+  $("appeal-panel").scrollIntoView({ behavior: "smooth" });
+});
+
+$("appeal-submit-btn").addEventListener("click", async () => {
   if (!currentSessionId) {
     showStatus("appeal-status", "无会话 ID，请先提交裁决", "error");
     return;
   }
   const appealedSection = $("appealed-section").value.trim();
   const appealReason = $("appeal-reason").value.trim();
-
-  $("appeal-status").textContent = "正在二审...";
+  if (!appealedSection || !appealReason) {
+    showStatus("appeal-status", "请填写条目与理由", "error");
+    return;
+  }
+  showStatus("appeal-status", "正在二审...", "info");
   try {
     const resp = await fetch(`${API_BASE}/v1/appeal`, {
       method: "POST",
@@ -101,9 +208,8 @@ $("reply-script-btn").addEventListener("click", async () => {
     showStatus("reply-script-status", "无会话 ID，请先提交裁决", "error");
     return;
   }
-  $("reply-script-section").hidden = false;
-  $("reply-script-section").scrollIntoView({ behavior: "smooth" });
-
+  $("reply-script-panel").hidden = false;
+  $("reply-script-panel").scrollIntoView({ behavior: "smooth" });
   try {
     const resp = await fetch(`${API_BASE}/v1/reply-script/opt-in`, {
       method: "POST",
@@ -121,22 +227,16 @@ $("reply-script-btn").addEventListener("click", async () => {
   }
 });
 
-$("reply-script-form").addEventListener("submit", async (e) => {
-  e.preventDefault();
+$("reply-script-submit-btn").addEventListener("click", async () => {
   if (!currentSessionId) return;
   const style = $("style").value;
   const extra = $("extra").value.trim();
-
   showStatus("reply-script-status", "正在生成话术...", "info");
   try {
     const resp = await fetch(`${API_BASE}/v1/reply-script`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        session_id: currentSessionId,
-        style,
-        extra,
-      }),
+      body: JSON.stringify({ session_id: currentSessionId, style, extra }),
     });
     const data = await resp.json();
     if (!resp.ok) {
@@ -153,6 +253,7 @@ $("reply-script-form").addEventListener("submit", async (e) => {
 
 function showStatus(elementId, message, type) {
   const el = $(elementId);
+  if (!el) return;
   el.textContent = message;
-  el.style.color = type === "error" ? "var(--danger)" : type === "success" ? "var(--success)" : "var(--muted)";
+  el.className = "status " + (type || "");
 }
