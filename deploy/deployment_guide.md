@@ -170,17 +170,41 @@ http://your-server-ip:7860
 
 ## 六、配置公网域名（可选但强烈推荐）
 
-### 6.1 域名解析
+### 6.0 注册 1 元域名（腾讯云特惠）
 
-在域名服务商（腾讯云 DNSPod 等）添加 A 记录：
+腾讯云经常有 `.cn` 域名首年 1 元活动。步骤：
 
-```
-judge.your-domain.com  A  your-server-ip
-```
+1. 浏览器打开 https://cloud.tencent.com/act/pro/domain_sales
+   - 或在腾讯云控制台搜索"域名特惠"
+2. 选 `.cn` 后缀，输入想要的域名（如 `judge-net`、`yourname-judge`）
+3. 加入购物车，结算时应显示首年 1 元
+4. **必须实名认证**：
+   - 个人账号：上传身份证正反面，等待审核（通常 1-3 个工作日，多数 1 小时内）
+   - 审核通过后域名才能正式解析使用
+5. 实名期间可先完成 6.1-6.4 步骤，等审核通过即可用
+
+### 6.1 域名解析（DNSPod）
+
+腾讯云域名默认用 DNSPod 解析。
+
+1. 进入 https://console.dnspod.cn/dns/list
+2. 找到刚注册的域名，点"解析"
+3. 添加记录：
+
+| 主机记录 | 记录类型 | 线路类型 | 记录值 | TTL |
+|---|---|---|---|---|
+| `@`（或 `judge`） | A | 默认 | `43.143.218.8`（你的服务器公网 IP） | 600 |
+
+- `@` 表示直接访问 `your-domain.cn`
+- `judge` 表示访问 `judge.your-domain.cn`（推荐）
+
+4. 保存。1-10 分钟内全球 DNS 生效。
 
 ### 6.2 nginx 反代 + HTTPS
 
 服务器装 nginx：
+
+
 
 ```bash
 sudo apt update && sudo apt install -y nginx certbot python3-certbot-nginx
