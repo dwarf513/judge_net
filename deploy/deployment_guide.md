@@ -168,6 +168,11 @@ http://your-server-ip:7860
 
 应看到 judge_net 前端单页。粘贴对话 → 提交 → 等待裁决报告。
 
+> 若 scholar-agent 已占用 80 端口（与 judge_net 共存场景），使用 nginx 反代 8080 端口：
+> - judge_net 通过 `http://judge-net.icu:8080` 访问
+> - scholar-agent 继续占 80 不受影响
+> - 详见第六节 nginx 配置
+
 ## 六、配置公网域名（可选但强烈推荐）
 
 ### 6.0 注册 1 元域名（腾讯云特惠）
