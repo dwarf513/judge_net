@@ -144,11 +144,22 @@ uploadZone.addEventListener("drop", (e) => {
 $("copy-btn").addEventListener("click", async () => {
   const text = $("verdict-rendered").innerText;
   try {
-    await navigator.clipboard.writeText(text);
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    }
     showStatus("submit-status", "已复制到剪贴板", "success");
     setTimeout(() => showStatus("submit-status", "", ""), 2000);
   } catch (err) {
-    showStatus("submit-status", `复制失败：${err}`, "error");
+    showStatus("submit-status", `复制失败：${err}，请手动选中文字复制`, "error");
   }
 });
 
