@@ -30,7 +30,7 @@ EXPOSE 7860
 
 ENV PORT=7860
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "7860"]
+CMD ["python3", "-u", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "7860"]
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
     CMD curl -fsS http://localhost:7860/healthz || exit 1

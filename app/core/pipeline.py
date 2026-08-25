@@ -113,9 +113,17 @@ async def adjudicate(
     输出：{session_id, dialogue_used, verdict, search_used, notes}
     """
     import asyncio as _asyncio
+    import time as _time
+    import sys
+
+    def log(msg: str) -> None:
+        print(f"[pipeline {_time.strftime('%H:%M:%S')}] {msg}", file=sys.stdout, flush=True)
 
     if not dialogue and not images:
         return {"error": "必须提供对话文本或截图"}
+
+    log(f"start adjudicate: dialogue={len(dialogue or '')} chars, images={len(images or [])}")
+    t0 = _time.time()
 
     system_prompt = get_system_prompt()
     search_used = False
@@ -123,29 +131,39 @@ async def adjudicate(
 
     # OCR 阶段（带超时，避免卡死）
     if images and not dialogue:
+        log("OCR stage start (images only)")
         try:
             ocr_result = await _asyncio.wait_for(ocr_images(images), timeout=180)
             dialogue = format_dialogue_text(ocr_result)
+            log(f"OCR done in {_time.time()-t0:.1f}s, dialogue={len(dialogue)} chars")
         except _asyncio.TimeoutError:
+            log(f"OCR TIMEOUT after {_time.time()-t0:.1f}s")
             return {"error": "截图 OCR 超时（180s），请尝试更清晰的截图或改用文本粘贴"}
         except Exception as exc:
+            log(f"OCR FAIL: {type(exc).__name__}: {exc}")
             return {"error": f"截图 OCR 失败：{type(exc).__name__}: {exc}"}
     elif images and dialogue:
+        log("OCR stage start (images + text)")
         try:
             ocr_result = await _asyncio.wait_for(ocr_images(images), timeout=180)
             ocr_text = format_dialogue_text(ocr_result)
             dialogue = f"{dialogue}\n\n=== 截图识别补充 ===\n{ocr_text}"
+            log(f"OCR done in {_time.time()-t0:.1f}s, dialogue={len(dialogue)} chars")
         except _asyncio.TimeoutError:
-            print("[pipeline] OCR timeout, continue with text only", flush=True)
+            log(f"OCR timeout, continue with text only")
         except Exception as exc:
-            print(f"[pipeline] OCR failed: {exc}, continue with text only", flush=True)
+            log(f"OCR failed: {exc}, continue with text only")
 
+    t1 = _time.time()
     user_msg = ADJUDICATE_USER_PROMPT.format(dialogue=dialogue)
+    log(f"user_msg built: {len(user_msg)} chars")
 
     # 联网检索阶段（LLM 抽词 + 并发搜索，带超时）
     if _needs_fact_check(dialogue):
+        log("fact-check stage start")
         try:
             queries = await _asyncio.wait_for(_llm_extract_queries(dialogue), timeout=30)
+            log(f"extract queries done in {_time.time()-t1:.1f}s: {queries}")
             if queries:
                 tasks = [search(q, max_results=3) for q in queries]
                 search_results_list = await _asyncio.wait_for(
@@ -153,14 +171,18 @@ async def adjudicate(
                     timeout=60,
                 )
                 search_results = [r for r in search_results_list if isinstance(r, dict)]
+                log(f"search done in {_time.time()-t1:.1f}s, {len(search_results)} results")
                 if search_results:
                     search_used = True
                     search_context = format_search_results(search_results)
                     user_msg += f"\n\n=== 联网检索补充 ===\n{search_context}"
         except _asyncio.TimeoutError:
-            print("[pipeline] search stage timeout, continue without search", flush=True)
+            log("search stage timeout, continue without search")
         except Exception as exc:
-            print(f"[pipeline] search failed: {exc}", flush=True)
+            log(f"search failed: {exc}")
+
+    t2 = _time.time()
+    log(f"main verdict stage start, total user_msg={len(user_msg)} chars")
 
     # 主裁决（带超时，避免 reasoning 模式无限思考）
     # GLM-5.2 reasoning 对长内容思考久，给到 480s（8分钟）兜底
@@ -169,7 +191,9 @@ async def adjudicate(
             chat_completion(system_prompt, user_msg),
             timeout=480,
         )
+        log(f"main verdict done in {_time.time()-t2:.1f}s, total {_time.time()-t0:.1f}s, verdict={len(verdict)} chars")
     except _asyncio.TimeoutError:
+        log(f"main verdict TIMEOUT after {_time.time()-t2:.1f}s")
         return {"error": "主裁决生成超时（480s）。可能原因：对话过长 / 截图内容复杂 / 模型当前负载高。建议：1) 简化对话内容 2) 减少截图数量 3) 稍后重试"}
 
     session = get_session_store().create(dialogue=dialogue, verdict=verdict)
