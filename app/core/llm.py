@@ -20,7 +20,7 @@ def get_client() -> AsyncOpenAI:
     return AsyncOpenAI(
         base_url=s.llm_base_url,
         api_key=s.llm_api_key,
-        timeout=120,
+        timeout=600,
     )
 
 

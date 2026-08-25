@@ -163,13 +163,14 @@ async def adjudicate(
             print(f"[pipeline] search failed: {exc}", flush=True)
 
     # 主裁决（带超时，避免 reasoning 模式无限思考）
+    # GLM-5.2 reasoning 对长内容思考久，给到 480s（8分钟）兜底
     try:
         verdict = await _asyncio.wait_for(
             chat_completion(system_prompt, user_msg),
-            timeout=300,
+            timeout=480,
         )
     except _asyncio.TimeoutError:
-        return {"error": "主裁决生成超时（300s），请稍后重试或简化对话内容"}
+        return {"error": "主裁决生成超时（480s）。可能原因：对话过长 / 截图内容复杂 / 模型当前负载高。建议：1) 简化对话内容 2) 减少截图数量 3) 稍后重试"}
 
     session = get_session_store().create(dialogue=dialogue, verdict=verdict)
 
