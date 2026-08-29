@@ -190,6 +190,21 @@ async def adjudicate(
                 url_text = format_url_content(url_result)
                 user_msg += f"\n\n{url_text}"
                 log(f"URL fetched: {len(url_result['content'])} chars, title={url_result.get('title','')[:50]}")
+                # 基于抓取内容做拓展搜索，深挖事件背景
+                title = url_result.get("title", "")
+                if title:
+                    log(f"expanding search based on URL title: {title[:60]}")
+                    try:
+                        expand_results = await _asyncio.wait_for(search(title, max_results=3), timeout=30)
+                        if expand_results.get("results"):
+                            expand_text = format_search_results([expand_results])
+                            user_msg += f"\n\n=== 基于链接的拓展检索 ===\n{expand_text}"
+                            search_used = True
+                            log(f"expand search done: {len(expand_results.get('results',[]))} results")
+                    except _asyncio.TimeoutError:
+                        log("expand search timeout, continue without")
+                    except Exception as exc:
+                        log(f"expand search error: {exc}")
             else:
                 log(f"URL fetch failed: {url_result.get('notes','')}")
         except _asyncio.TimeoutError:
