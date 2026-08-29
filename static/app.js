@@ -78,6 +78,8 @@ $("submit-btn").addEventListener("click", async () => {
 
   const formData = new FormData();
   if (dialogue) formData.append("dialogue", dialogue);
+  const contextUrl = $("context-url")?.value.trim();
+  if (contextUrl) formData.append("context_url", contextUrl);
   for (const img of images) formData.append("images", img);
 
   $("submit-btn").disabled = true;

@@ -13,6 +13,7 @@ from app.core.ocr import format_dialogue_text, ocr_images
 from app.core.prompt_builder import get_system_prompt
 from app.core.search import format_search_results, search
 from app.core.session import get_session_store
+from app.core.url_fetcher import fetch_url_content, format_url_content
 
 
 ADJUDICATE_USER_PROMPT = """请对以下网络对话做出裁决，严格按 system_prompt.md 中规定的 12 节裁决报告格式输出。
@@ -127,10 +128,11 @@ def _extract_search_queries_legacy(dialogue: str) -> list[str]:
 async def adjudicate(
     dialogue: str | None = None,
     images: list[bytes] | None = None,
+    context_url: str | None = None,
 ) -> dict[str, Any]:
     """主裁决流程。
 
-    输入：对话文本（可空）+ 截图列表（可空），至少一项。
+    输入：对话文本（可空）+ 截图列表（可空）+ 事件背景链接（可空），至少一项。
     输出：{session_id, dialogue_used, verdict, search_used, notes}
     """
     import asyncio as _asyncio
@@ -143,7 +145,7 @@ async def adjudicate(
     if not dialogue and not images:
         return {"error": "必须提供对话文本或截图"}
 
-    log(f"start adjudicate: dialogue={len(dialogue or '')} chars, images={len(images or [])}")
+    log(f"start adjudicate: dialogue={len(dialogue or '')} chars, images={len(images or [])}, url={'yes' if context_url else 'no'}")
     t0 = _time.time()
 
     system_prompt = get_system_prompt()
@@ -178,6 +180,22 @@ async def adjudicate(
     t1 = _time.time()
     user_msg = ADJUDICATE_USER_PROMPT.format(dialogue=dialogue)
     log(f"user_msg built: {len(user_msg)} chars")
+
+    # 用户提供的事件背景链接抓取
+    if context_url:
+        log(f"fetching context URL: {context_url[:80]}")
+        try:
+            url_result = await _asyncio.wait_for(fetch_url_content(context_url), timeout=20)
+            if url_result.get("content"):
+                url_text = format_url_content(url_result)
+                user_msg += f"\n\n{url_text}"
+                log(f"URL fetched: {len(url_result['content'])} chars, title={url_result.get('title','')[:50]}")
+            else:
+                log(f"URL fetch failed: {url_result.get('notes','')}")
+        except _asyncio.TimeoutError:
+            log("URL fetch timeout (20s), continue without")
+        except Exception as exc:
+            log(f"URL fetch error: {exc}")
 
     # 联网检索阶段（LLM 抽词 + 并发搜索，带超时）
     if _needs_fact_check(dialogue):
