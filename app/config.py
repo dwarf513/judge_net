@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     # LLM
     llm_base_url: str = "https://llmapi.paratera.com/v1"
     llm_api_key: str = ""
-    llm_model_reasoning: str = "GLM-4-Plus"
+    llm_model_reasoning: str = "DeepSeek-V3.2-Instruct"
     llm_model_vision: str = "GLM-4V"
     llm_model_embedding: str = "GLM-Embedding-2"
 

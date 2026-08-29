@@ -1,7 +1,7 @@
 """LLM 客户端封装。
 
 复用 paratera MaaS（OpenAI 兼容协议）。
-- chat_completion：调用 GLM-5.2 做三层分析与裁决报告生成。
+- chat_completion：主裁决调用，支持内容审核 fallback。
 - vision_completion：调用 GLM-4V 做截图 OCR 与角色分割。
 """
 from __future__ import annotations
@@ -24,6 +24,15 @@ def get_client() -> AsyncOpenAI:
     )
 
 
+CONTENT_FILTER_KEYWORDS = ["不安全", "敏感内容", "sensitive", "unsafe"]
+
+
+def _is_content_filter_error(exc: Exception) -> bool:
+    """判断是否是内容审核拦截错误。"""
+    msg = str(exc).lower()
+    return any(kw.lower() in msg for kw in CONTENT_FILTER_KEYWORDS)
+
+
 @retry(
     reraise=True,
     stop=stop_after_attempt(2),
@@ -37,19 +46,39 @@ async def chat_completion(
     max_tokens: int | None = None,
     temperature: float | None = None,
 ) -> str:
-    """同步聊天补全（非流式）。返回文本。"""
+    """同步聊天补全（非流式）。返回文本。
+
+    内容审核 fallback：若主模型被内容审核拦截，自动切换到 GLM-5.2 重试。
+    """
     s = get_settings()
     client = get_client()
-    resp = await client.chat.completions.create(
-        model=model or s.llm_model_reasoning,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_msg},
-        ],
-        temperature=temperature if temperature is not None else s.llm_temperature,
-        max_tokens=max_tokens or s.llm_max_tokens,
-    )
-    return resp.choices[0].message.content or ""
+    primary_model = model or s.llm_model_reasoning
+
+    try:
+        resp = await client.chat.completions.create(
+            model=primary_model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_msg},
+            ],
+            temperature=temperature if temperature is not None else s.llm_temperature,
+            max_tokens=max_tokens or s.llm_max_tokens,
+        )
+        return resp.choices[0].message.content or ""
+    except Exception as exc:
+        if _is_content_filter_error(exc) and primary_model != "GLM-5.2":
+            print(f"[llm] content filter hit on {primary_model}, falling back to GLM-5.2", flush=True)
+            resp = await client.chat.completions.create(
+                model="GLM-5.2",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_msg},
+                ],
+                temperature=temperature if temperature is not None else s.llm_temperature,
+                max_tokens=max_tokens or s.llm_max_tokens,
+            )
+            return resp.choices[0].message.content or ""
+        raise
 
 
 @retry(

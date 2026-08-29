@@ -185,13 +185,13 @@ async def adjudicate(
     log(f"main verdict stage start, total user_msg={len(user_msg)} chars")
 
     # 主裁决（带超时）
-    # GLM-4-Plus 非 reasoning 模型，30-60s 完成；给 180s 兜底
+    # 主模型 DeepSeek-V3.2-Instruct 30-60s；内容审核拦截时 fallback 到 GLM-5.2 需要 200-300s
     verdict = ""
     for attempt in range(3):
         try:
             verdict = await _asyncio.wait_for(
                 chat_completion(system_prompt, user_msg),
-                timeout=180,
+                timeout=360,
             )
             log(f"main verdict attempt {attempt+1} done in {_time.time()-t2:.1f}s, verdict={len(verdict)} chars")
             if verdict.strip():
@@ -202,7 +202,7 @@ async def adjudicate(
             if attempt < 2:
                 t2 = _time.time()
                 continue
-            return {"error": "主裁决生成超时（180s）。建议：1) 简化对话内容 2) 减少截图数量 3) 稍后重试"}
+            return {"error": "主裁决生成超时（360s）。建议：1) 简化对话内容 2) 减少截图数量 3) 稍后重试"}
 
     if not verdict.strip():
         return {"error": "主裁决返回空内容（模型可能因 max_tokens 不足或内容过滤未输出）。建议：1) 简化对话内容 2) 稍后重试"}
