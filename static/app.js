@@ -35,21 +35,37 @@ function startProgress() {
 }
 
 function stopProgress(success) {
-  if (progressTimer) {
-    clearInterval(progressTimer);
-    progressTimer = null;
-  }
+  if (progressTimer) { clearInterval(progressTimer); progressTimer = null; }
   const area = $("progress-area");
   const fill = $("progress-fill");
   const stage = $("progress-stage");
-  if (success) {
-    fill.style.width = "100%";
-    stage.textContent = "裁决完成";
-  }
+  if (success) { fill.style.width = "100%"; stage.textContent = "裁决完成"; }
   setTimeout(() => { area.hidden = true; }, 1500);
 }
 
-$("adjudicate-form")?.addEventListener("submit", (e) => e.preventDefault());
+function collapseInput() {
+  const body = $("input-body");
+  const toggle = $("toggle-input");
+  if (body && toggle) {
+    body.hidden = true;
+    toggle.hidden = false;
+    toggle.textContent = "展开输入区";
+  }
+}
+
+function expandInput() {
+  const body = $("input-body");
+  const toggle = $("toggle-input");
+  if (body && toggle) {
+    body.hidden = false;
+    toggle.hidden = true;
+  }
+}
+
+$("toggle-input")?.addEventListener("click", () => {
+  const body = $("input-body");
+  if (body.hidden) { expandInput(); } else { collapseInput(); }
+});
 
 $("submit-btn").addEventListener("click", async () => {
   const dialogue = $("dialogue").value.trim();
@@ -83,7 +99,8 @@ $("submit-btn").addEventListener("click", async () => {
       : "仅基于模型训练知识";
     $("verdict-rendered").innerHTML = marked.parse(data.verdict);
     $("result-section").hidden = false;
-    $("result-section").scrollIntoView({ behavior: "smooth", block: "start" });
+    collapseInput();
+    setTimeout(() => { $("result-section").scrollIntoView({ behavior: "smooth", block: "start" }); }, 100);
     showStatus("submit-status", "裁决完成", "success");
     stopProgress(true);
   } catch (err) {
@@ -116,29 +133,18 @@ function renderImagePreview(files) {
   });
 }
 
-$("images").addEventListener("change", (e) => {
-  renderImagePreview(e.target.files);
-});
+$("images").addEventListener("change", (e) => { renderImagePreview(e.target.files); });
 
 const uploadZone = $("upload-zone");
 ["dragenter", "dragover"].forEach(evt => {
-  uploadZone.addEventListener(evt, (e) => {
-    e.preventDefault();
-    uploadZone.classList.add("dragover");
-  });
+  uploadZone.addEventListener(evt, (e) => { e.preventDefault(); uploadZone.classList.add("dragover"); });
 });
 ["dragleave", "drop"].forEach(evt => {
-  uploadZone.addEventListener(evt, (e) => {
-    e.preventDefault();
-    uploadZone.classList.remove("dragover");
-  });
+  uploadZone.addEventListener(evt, (e) => { e.preventDefault(); uploadZone.classList.remove("dragover"); });
 });
 uploadZone.addEventListener("drop", (e) => {
   const files = e.dataTransfer.files;
-  if (files.length > 0) {
-    $("images").files = files;
-    renderImagePreview(files);
-  }
+  if (files.length > 0) { $("images").files = files; renderImagePreview(files); }
 });
 
 $("copy-btn").addEventListener("click", async () => {
@@ -180,45 +186,27 @@ $("appeal-btn").addEventListener("click", () => {
 });
 
 $("appeal-submit-btn").addEventListener("click", async () => {
-  if (!currentSessionId) {
-    showStatus("appeal-status", "无会话 ID，请先提交裁决", "error");
-    return;
-  }
+  if (!currentSessionId) { showStatus("appeal-status", "无会话 ID，请先提交裁决", "error"); return; }
   const appealedSection = $("appealed-section").value.trim();
   const appealReason = $("appeal-reason").value.trim();
-  if (!appealedSection || !appealReason) {
-    showStatus("appeal-status", "请填写条目与理由", "error");
-    return;
-  }
+  if (!appealedSection || !appealReason) { showStatus("appeal-status", "请填写条目与理由", "error"); return; }
   showStatus("appeal-status", "正在二审...", "info");
   try {
     const resp = await fetch(`${API_BASE}/v1/appeal`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        session_id: currentSessionId,
-        appealed_section: appealedSection,
-        appeal_reason: appealReason,
-      }),
+      body: JSON.stringify({ session_id: currentSessionId, appealed_section: appealedSection, appeal_reason: appealReason }),
     });
     const data = await resp.json();
-    if (!resp.ok) {
-      showStatus("appeal-status", `错误：${data.error}`, "error");
-      return;
-    }
+    if (!resp.ok) { showStatus("appeal-status", `错误：${data.error}`, "error"); return; }
     $("appeal-result").innerHTML = marked.parse(data.second_verdict);
     $("appeal-result").hidden = false;
     showStatus("appeal-status", "二审完成", "success");
-  } catch (err) {
-    showStatus("appeal-status", `网络错误：${err}`, "error");
-  }
+  } catch (err) { showStatus("appeal-status", `网络错误：${err}`, "error"); }
 });
 
 $("reply-script-btn").addEventListener("click", async () => {
-  if (!currentSessionId) {
-    showStatus("reply-script-status", "无会话 ID，请先提交裁决", "error");
-    return;
-  }
+  if (!currentSessionId) { showStatus("reply-script-status", "无会话 ID，请先提交裁决", "error"); return; }
   $("reply-script-panel").hidden = false;
   $("reply-script-panel").scrollIntoView({ behavior: "smooth" });
   try {
@@ -228,14 +216,9 @@ $("reply-script-btn").addEventListener("click", async () => {
       body: JSON.stringify({ session_id: currentSessionId }),
     });
     const data = await resp.json();
-    if (!resp.ok) {
-      $("opt-in-info").textContent = `opt-in 失败：${data.error}`;
-      return;
-    }
+    if (!resp.ok) { $("opt-in-info").textContent = `opt-in 失败：${data.error}`; return; }
     $("opt-in-info").textContent = data.message;
-  } catch (err) {
-    $("opt-in-info").textContent = `网络错误：${err}`;
-  }
+  } catch (err) { $("opt-in-info").textContent = `网络错误：${err}`; }
 });
 
 $("reply-script-submit-btn").addEventListener("click", async () => {
@@ -250,16 +233,11 @@ $("reply-script-submit-btn").addEventListener("click", async () => {
       body: JSON.stringify({ session_id: currentSessionId, style, extra }),
     });
     const data = await resp.json();
-    if (!resp.ok) {
-      showStatus("reply-script-status", `错误：${data.error}`, "error");
-      return;
-    }
+    if (!resp.ok) { showStatus("reply-script-status", `错误：${data.error}`, "error"); return; }
     $("reply-script-result").innerHTML = marked.parse(data.script);
     $("reply-script-result").hidden = false;
     showStatus("reply-script-status", "话术已生成", "success");
-  } catch (err) {
-    showStatus("reply-script-status", `网络错误：${err}`, "error");
-  }
+  } catch (err) { showStatus("reply-script-status", `网络错误：${err}`, "error"); }
 });
 
 function showStatus(elementId, message, type) {

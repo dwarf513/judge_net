@@ -4,13 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>judge_net · 网络冲突法官智能体</title>
-  <link rel="stylesheet" href="/static/style.css?v=3">
+  <link rel="stylesheet" href="/static/style.css?v=5">
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
   <header class="hero">
     <div class="hero-content">
-      <svg class="hero-icon" viewBox="0 0 64 64" width="48" height="48" aria-hidden="true">
+      <svg class="hero-icon" viewBox="0 0 64 64" width="44" height="44" aria-hidden="true">
         <path d="M32 6 L32 12" stroke="currentColor" stroke-width="3" stroke-linecap="round" fill="none"/>
         <path d="M14 14 L50 14" stroke="currentColor" stroke-width="3" stroke-linecap="round" fill="none"/>
         <path d="M14 14 L8 32 M14 14 L20 32 M50 14 L44 32 M50 14 L56 32" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/>
@@ -26,38 +26,42 @@
   </header>
 
   <main class="layout">
-    <section class="panel input-panel">
-      <h2 class="panel-title">提交争议对话</h2>
-
-      <label for="dialogue">对话原文（粘贴文本，可选）</label>
-      <textarea id="dialogue" name="dialogue" rows="10" placeholder="按发言方分段粘贴，如：
+    <section class="panel input-panel" id="input-section">
+      <div class="panel-header">
+        <h2 class="panel-title">提交争议对话</h2>
+        <button type="button" id="toggle-input" class="ghost-btn" hidden>收起</button>
+      </div>
+      <div id="input-body">
+        <label for="dialogue">对话原文（粘贴文本，可选）</label>
+        <textarea id="dialogue" name="dialogue" rows="6" placeholder="按发言方分段粘贴，如：
 
 @用户A：...
 
 @用户B：..."></textarea>
 
-      <label for="images">
-        截图上传（可选）
-        <span class="hint">多张截图请按时间顺序排列。点击下方区域选择文件，可按住 Ctrl 键多选</span>
-      </label>
-      <div class="upload-zone" id="upload-zone">
-        <input type="file" id="images" name="images" accept="image/*" multiple>
-        <div class="upload-label">
-          <svg viewBox="0 0 24 24" width="32" height="32" aria-hidden="true">
-            <path d="M12 4 V16 M6 10 L12 4 L18 10 M4 20 H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-          </svg>
-          <span>点击选择，或拖拽截图到此</span>
+        <label for="images">
+          截图上传（可选）
+          <span class="hint">多张截图请按时间顺序排列。点击下方区域选择文件，可按住 Ctrl 键多选</span>
+        </label>
+        <div class="upload-zone" id="upload-zone">
+          <input type="file" id="images" name="images" accept="image/*" multiple>
+          <div class="upload-label">
+            <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true">
+              <path d="M12 4 V16 M6 10 L12 4 L18 10 M4 20 H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            </svg>
+            <span>点击选择，或拖拽截图到此</span>
+          </div>
+          <div id="image-preview" class="image-preview"></div>
         </div>
-        <div id="image-preview" class="image-preview"></div>
-      </div>
 
-      <button type="button" id="submit-btn" class="primary-btn">提交裁决</button>
+        <button type="button" id="submit-btn" class="primary-btn">提交裁决</button>
 
-      <div id="progress-area" class="progress-area" hidden>
-        <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
-        <p id="progress-stage" class="progress-stage">准备中...</p>
+        <div id="progress-area" class="progress-area" hidden>
+          <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+          <p id="progress-stage" class="progress-stage">准备中...</p>
+        </div>
+        <p id="submit-status" class="status"></p>
       </div>
-      <p id="submit-status" class="status"></p>
     </section>
 
     <section class="panel result-panel" id="result-section" hidden>
@@ -72,7 +76,7 @@
         <span id="session-id-display"></span>
         <span id="search-info"></span>
       </div>
-      <div id="verdict-rendered" class="verdict-content"></div>
+      <article id="verdict-rendered" class="verdict-content"></article>
       <div class="actions">
         <button type="button" id="appeal-btn" class="ghost-btn">提起上诉</button>
         <button type="button" id="reply-script-btn" class="ghost-btn">请求应答话术</button>
@@ -113,6 +117,6 @@
     <p>judge_net · DIY 高代码赛道 · 公正 · 客观 · 有温度</p>
   </footer>
 
-  <script src="/static/app.js?v=3"></script>
+  <script src="/static/app.js?v=5"></script>
 </body>
 </html>
