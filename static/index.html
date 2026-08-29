@@ -4,25 +4,22 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>judge_net · 网络冲突法官智能体</title>
-  <link rel="stylesheet" href="/static/style.css?v=7">
+  <link rel="stylesheet" href="/static/style.css?v=8">
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
   <header class="hero">
-    <div class="hero-content">
-      <svg class="hero-icon" viewBox="0 0 64 64" width="52" height="52" aria-hidden="true">
-        <path d="M32 6 L32 12" stroke="currentColor" stroke-width="3" stroke-linecap="round" fill="none"/>
-        <path d="M14 14 L50 14" stroke="currentColor" stroke-width="3" stroke-linecap="round" fill="none"/>
-        <path d="M14 14 L8 32 M14 14 L20 32 M50 14 L44 32 M50 14 L56 32" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/>
-        <path d="M8 32 L20 32 M44 32 L56 32 M8 32 A6 6 0 0 1 20 32 M44 32 A6 6 0 0 1 56 32" stroke="currentColor" stroke-width="2" fill="none"/>
-        <path d="M32 32 L32 50 M22 56 L42 56 M22 56 L22 50 L42 50 L42 56" stroke="currentColor" stroke-width="3" stroke-linecap="round" fill="none"/>
-      </svg>
-      <div>
-        <h1>judge_net</h1>
-        <p class="tagline">网络冲突法官智能体 · 厘清事实、辨别谬误、看见降温路径</p>
-      </div>
-    </div>
-    <p class="hero-sub">不各打五十大板 · 不冒充真理裁判 · 网络和谐健康优先</p>
+    <p class="hero-kicker">网络冲突研究</p>
+    <svg class="hero-icon" viewBox="0 0 64 64" width="40" height="40" aria-hidden="true">
+      <path d="M32 6 L32 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+      <path d="M14 14 L50 14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+      <path d="M14 14 L8 32 M14 14 L20 32 M50 14 L44 32 M50 14 L56 32" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/>
+      <path d="M8 32 L20 32 M44 32 L56 32 M8 32 A6 6 0 0 1 20 32 M44 32 A6 6 0 0 1 56 32" stroke="currentColor" stroke-width="2" fill="none"/>
+      <path d="M32 32 L32 50 M22 56 L42 56 M22 56 L22 50 L42 50 L42 56" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+    </svg>
+    <h1 class="hero-title">judge<em>_</em>net</h1>
+    <p class="hero-sub">网络冲突法官智能体 —— 厘清事实、辨别谬误、看见降温路径</p>
+    <p class="hero-motto">公正 · 客观 · 有温度</p>
   </header>
 
   <main class="layout">
@@ -35,36 +32,36 @@
         <label for="dialogue">对话原文</label>
         <textarea id="dialogue" name="dialogue" rows="6" placeholder="按发言方分段粘贴，如：
 
-@用户A：...
+@用户A：……
 
-@用户B：..."></textarea>
+@用户B：……"></textarea>
 
         <label for="context-url">
-          事件背景链接（可选）
-          <span class="hint">提供新闻/百科链接帮助 agent 了解事件背景</span>
+          事件背景链接
+          <span class="hint">可选，提供新闻或百科链接帮助理解事件</span>
         </label>
-        <input type="text" id="context-url" name="context_url" placeholder="https://..." />
+        <input type="text" id="context-url" name="context_url" placeholder="https://……" />
 
         <label for="images">
           截图上传
-          <span class="hint">多张按时间排序，Ctrl 多选</span>
+          <span class="hint">多张按时间排序，可拖拽调整</span>
         </label>
         <div class="upload-zone" id="upload-zone">
           <input type="file" id="images" name="images" accept="image/*" multiple>
           <div class="upload-label">
-            <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true">
-              <path d="M12 4 V16 M6 10 L12 4 L18 10 M4 20 H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
+              <path d="M12 4 V16 M6 10 L12 4 L18 10 M4 20 H20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
             </svg>
             <span>点击或拖拽截图到此</span>
           </div>
           <div id="image-preview" class="image-preview"></div>
         </div>
 
-        <button type="button" id="submit-btn" class="primary-btn">提交裁决</button>
+        <button type="button" id="submit-btn" class="primary-btn">提 交 裁 决</button>
 
         <div id="progress-area" class="progress-area" hidden>
           <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
-          <p id="progress-stage" class="progress-stage">准备中...</p>
+          <p id="progress-stage" class="progress-stage">准备中</p>
         </div>
         <p id="submit-status" class="status"></p>
       </div>
@@ -95,13 +92,13 @@
       <input type="text" id="appealed-section" placeholder="如：四、事实核查表第 2 条" required>
       <label for="appeal-reason">新证据 / 异议理由</label>
       <textarea id="appeal-reason" rows="4" placeholder="提供新证据或具体异议理由" required></textarea>
-      <button type="button" id="appeal-submit-btn" class="primary-btn">提交上诉</button>
+      <button type="button" id="appeal-submit-btn" class="primary-btn">提 交 上 诉</button>
       <p id="appeal-status" class="status"></p>
       <div id="appeal-result" class="verdict-content" hidden></div>
     </section>
 
     <section class="panel sub-panel" id="reply-script-panel" hidden>
-      <h2 class="panel-title">应答话术（opt-in · 多轮策略）</h2>
+      <h2 class="panel-title">应答话术 · 多轮策略</h2>
       <div id="opt-in-info" class="opt-in-info"></div>
       <label for="style">话术风格</label>
       <select id="style">
@@ -111,7 +108,7 @@
         <option value="委婉纠正">委婉纠正</option>
         <option value="引经据典">引经据典</option>
       </select>
-      <label for="extra">额外说明（可选）</label>
+      <label for="extra">额外说明</label>
       <textarea id="extra" rows="2" placeholder="如：我是当事方成员，不想显得敏感"></textarea>
       <button type="button" id="reply-script-submit-btn" class="primary-btn">生成第一轮话术</button>
       <p id="reply-script-status" class="status"></p>
@@ -125,9 +122,9 @@
   </main>
 
   <footer>
-    <p>judge_net · DIY 高代码赛道 · 公正 · 客观 · 有温度</p>
+    <p>judge_net · diy 高代码赛道</p>
   </footer>
 
-  <script src="/static/app.js?v=7"></script>
+  <script src="/static/app.js?v=8"></script>
 </body>
 </html>
