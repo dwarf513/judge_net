@@ -70,7 +70,7 @@ $("toggle-input")?.addEventListener("click", () => {
 
 $("submit-btn").addEventListener("click", async () => {
   const dialogue = $("dialogue").value.trim();
-  const images = $("images").files;
+  const images = imageFiles;
 
   if (!dialogue && images.length === 0) {
     showStatus("submit-status", "请粘贴对话原文或上传截图", "error");
@@ -81,7 +81,7 @@ $("submit-btn").addEventListener("click", async () => {
   if (dialogue) formData.append("dialogue", dialogue);
   const contextUrl = $("context-url")?.value.trim();
   if (contextUrl) formData.append("context_url", contextUrl);
-  for (const img of images) formData.append("images", img);
+  for (const img of imageFiles) formData.append("images", img);
 
   $("submit-btn").disabled = true;
   showStatus("submit-status", "", "");
@@ -114,12 +114,17 @@ $("submit-btn").addEventListener("click", async () => {
   }
 });
 
-function renderImagePreview(files) {
+let imageFiles = [];
+
+function renderImagePreview() {
   const preview = $("image-preview");
   preview.innerHTML = "";
-  Array.from(files).forEach((file, idx) => {
+  if (imageFiles.length === 0) return;
+  imageFiles.forEach((file, idx) => {
     const item = document.createElement("div");
     item.className = "image-preview-item";
+    item.draggable = true;
+    item.dataset.index = idx;
     const img = document.createElement("img");
     img.src = URL.createObjectURL(file);
     img.onload = () => URL.revokeObjectURL(img.src);
@@ -132,11 +137,42 @@ function renderImagePreview(files) {
     item.appendChild(img);
     item.appendChild(badge);
     item.appendChild(name);
+
+    item.addEventListener("dragstart", (e) => {
+      item.classList.add("dragging");
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", idx);
+    });
+    item.addEventListener("dragend", () => { item.classList.remove("dragging"); });
+    item.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      item.classList.add("drag-over");
+    });
+    item.addEventListener("dragleave", () => { item.classList.remove("drag-over"); });
+    item.addEventListener("drop", (e) => {
+      e.preventDefault();
+      item.classList.remove("drag-over");
+      const fromIdx = parseInt(e.dataTransfer.getData("text/plain"));
+      const toIdx = parseInt(item.dataset.index);
+      if (fromIdx === toIdx) return;
+      const moved = imageFiles.splice(fromIdx, 1)[0];
+      imageFiles.splice(toIdx, 0, moved);
+      renderImagePreview();
+    });
+
     preview.appendChild(item);
   });
+  const hint = document.createElement("div");
+  hint.className = "image-preview-hint";
+  hint.textContent = "拖拽可调整顺序（序号 1 为最早的对话）";
+  preview.appendChild(hint);
 }
 
-$("images").addEventListener("change", (e) => { renderImagePreview(e.target.files); });
+$("images").addEventListener("change", (e) => {
+  imageFiles = Array.from(e.target.files);
+  renderImagePreview();
+});
 
 const uploadZone = $("upload-zone");
 ["dragenter", "dragover"].forEach(evt => {
@@ -146,8 +182,12 @@ const uploadZone = $("upload-zone");
   uploadZone.addEventListener(evt, (e) => { e.preventDefault(); uploadZone.classList.remove("dragover"); });
 });
 uploadZone.addEventListener("drop", (e) => {
-  const files = e.dataTransfer.files;
-  if (files.length > 0) { $("images").files = files; renderImagePreview(files); }
+  e.preventDefault();
+  const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith("image/"));
+  if (files.length > 0) {
+    imageFiles = imageFiles.concat(files);
+    renderImagePreview();
+  }
 });
 
 $("copy-btn").addEventListener("click", async () => {

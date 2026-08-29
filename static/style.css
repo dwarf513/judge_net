@@ -248,16 +248,20 @@ textarea::placeholder, input::placeholder { color: var(--text-faint); }
 .upload-label svg { color: var(--accent-soft); opacity: 0.5; }
 
 .image-preview { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.6rem; }
-.image-preview-item { position: relative; width: 80px; height: 80px; }
+.image-preview-item { position: relative; width: 80px; height: 80px; cursor: move; transition: opacity var(--transition-fast); }
+.image-preview-item.dragging { opacity: 0.4; }
+.image-preview-item.drag-over { border: 2px dashed var(--accent); }
 .image-preview-item img {
   width: 100%; height: 100%; object-fit: cover;
   border: 1px solid var(--border); border-radius: var(--radius-sm);
+  pointer-events: none;
 }
 .image-preview-item .badge {
   position: absolute; top: -4px; left: -4px;
   background: var(--accent); color: var(--bg-deep);
   font-size: 0.68rem; font-weight: 600;
   padding: 0.08rem 0.35rem; border-radius: 8px;
+  pointer-events: none;
 }
 .image-preview-item .name {
   position: absolute; bottom: 0; left: 0; right: 0;
@@ -265,6 +269,10 @@ textarea::placeholder, input::placeholder { color: var(--text-faint); }
   font-size: 0.62rem; padding: 0.12rem 0.25rem;
   text-align: center; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap;
+  pointer-events: none;
+}
+.image-preview-hint {
+  font-size: 0.76rem; color: var(--text-muted); margin-top: 0.4rem;
 }
 
 /* ========== 按钮（状态完整：默认/hover/active/disabled） ========== */

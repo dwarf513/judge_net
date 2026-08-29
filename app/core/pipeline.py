@@ -18,6 +18,8 @@ from app.core.url_fetcher import fetch_url_content, format_url_content
 
 ADJUDICATE_USER_PROMPT = """请对以下网络对话做出裁决，严格按 system_prompt.md 中规定的 12 节裁决报告格式输出。
 
+**重要：在开始裁决前，先在内部理清对话结构——谁说了什么、谁回复谁、是否存在嵌套回复。如果你发现对话结构不清晰或有错位，请先在内部修正再分析。不要在报告中输出结构整理过程，直接输出 12 节裁决报告。**
+
 === 对话原文 ===
 {dialogue}
 """
