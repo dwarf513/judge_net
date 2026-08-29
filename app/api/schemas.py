@@ -47,12 +47,16 @@ class ReplyScriptRequest(BaseModel):
         description="话术风格：直接说理 / 反讽克制 / 委婉纠正 / 引经据典 / 降温退场",
     )
     extra: str = Field(default="", description="用户额外说明")
+    opponent_reply: str = Field(default="", description="对方实际回复了什么（第二轮起需提供）")
+    round_num: int = Field(default=1, description="第几轮话术（默认第一轮）")
 
 
 class ReplyScriptResponse(BaseModel):
     session_id: str
     style: str
+    round: int
     script: str
+    total_rounds: int
 
 
 class ErrorResponse(BaseModel):

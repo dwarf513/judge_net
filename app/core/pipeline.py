@@ -296,26 +296,7 @@ async def appeal(
     }
 
 
-REPLY_SCRIPT_OPT_IN_PROMPT = """以下是用户已确认 opt-in 的应答话术请求。
-
-对应原争议：
-{dialogue}
-
-对应原裁决报告：
-{verdict}
-
-用户请求的风格：{style}
-用户的额外说明：{extra}
-
-请依据 knowledge/response_script_guardrails.md 生成应答话术：
-- 必须基于裁决报告中"已证实"的事实。
-- 单次 ≤ 300 字。
-- 不评价对方人格。
-- 拒绝清单内容（人身攻击/人肉/煽动/欺骗/情绪操纵/法律风险/针对未成年人）任何情况不生成。
-"""
-
-
-REPLY_SCRIPT_GENERATE_PROMPT = """以下是用户已确认 opt-in 的应答话术请求。
+REPLY_SCRIPT_ROUND1_PROMPT = """用户已确认 opt-in，请求第一轮应答话术。
 
 === 原争议对话 ===
 {dialogue}
@@ -329,11 +310,57 @@ REPLY_SCRIPT_GENERATE_PROMPT = """以下是用户已确认 opt-in 的应答话�
 === 用户额外说明 ===
 {extra}
 
-请依据 knowledge/response_script_guardrails.md 生成应答话术。要求：
-- 只用裁决报告"四、事实核查表"中标"已证实"的事实。
-- 单次生成 ≤ 300 字。
-- 不评价对方人格，不预测对方反应，不诱导转发。
-- 若用户请求的内容触发拒绝清单，直接拒绝并说明原因。
+请依据 knowledge/response_script_guardrails.md 的分步策略模式生成话术。
+
+输出格式（必须包含两部分）：
+
+【即时话术】（1-3 句，≤100 字）
+[可直接发送的简短回复，有情商、不敏感、有尊严、点出对方缺陷]
+
+【后续策略指引】
+- 若对方[回应类型 A]：建议[策略 A]
+- 若对方[回应类型 B]：建议[策略 B]
+- 若对方[回避/拉黑/情绪升级]：建议[应对]
+
+要求：
+- 即时话术像发帖不像写信，不用"您"，用"你"。
+- ≤100 字，长文=敏感。
+- 有态度但不人身攻击。
+- 只用裁决报告中"已证实"的事实。
+- 若触发拒绝清单，直接拒绝。
+"""
+
+
+REPLY_SCRIPT_NEXT_ROUND_PROMPT = """用户已在进行多轮话术对话，现在请求下一轮。
+
+=== 原争议对话 ===
+{dialogue}
+
+=== 原裁决报告 ===
+{verdict}
+
+=== 用户选择的话术风格 ===
+{style}
+
+=== 之前各轮话术历史 ===
+{history}
+
+=== 用户告知对方实际回复了什么 ===
+{opponent_reply}
+
+=== 用户额外说明 ===
+{extra}
+
+请依据 knowledge/response_script_guardrails.md 生成下一轮话术。
+
+输出格式（同上，包含即时话术 + 后续策略指引两部分）。
+
+要求：
+- 记住上下文，不重复之前说过的话。
+- 根据对方实际回复调整策略——对方认真回应就深化论证，对方人身攻击就降温退场。
+- 即时话术 ≤100 字。
+- 若对方已拉黑或停止回复，建议用户体面退出。
+- 若已进行 3 轮以上且无效，强烈建议降温退场。
 """
 
 
@@ -341,8 +368,10 @@ async def reply_script(
     session_id: str,
     style: str,
     extra: str = "",
+    opponent_reply: str = "",
+    round_num: int = 1,
 ) -> dict[str, Any]:
-    """应答话术生成（须先 opt-in）。"""
+    """应答话术生成（须先 opt-in）。支持多轮对话。"""
     store = get_session_store()
     session = store.get(session_id)
     if session is None:
@@ -351,11 +380,45 @@ async def reply_script(
         return {"error": "请先发起 opt-in 确认（POST /v1/reply-script/opt-in）。"}
 
     system_prompt = get_system_prompt()
-    user_msg = REPLY_SCRIPT_GENERATE_PROMPT.format(
-        dialogue=session.dialogue,
-        verdict=session.verdict,
-        style=style,
-        extra=extra or "(无)",
-    )
+
+    if round_num <= 1 or not opponent_reply:
+        prompt_template = REPLY_SCRIPT_ROUND1_PROMPT
+        user_msg = prompt_template.format(
+            dialogue=session.dialogue,
+            verdict=session.verdict,
+            style=style,
+            extra=extra or "(无)",
+        )
+    else:
+        history = getattr(session, "reply_script_history", []) or []
+        history_text = ""
+        for i, h in enumerate(history, 1):
+            history_text += f"\n第{i}轮：\n  即时话术：{h.get('script','')}\n  对方回复：{h.get('opponent_reply','')}\n"
+        user_msg = REPLY_SCRIPT_NEXT_ROUND_PROMPT.format(
+            dialogue=session.dialogue,
+            verdict=session.verdict,
+            style=style,
+            history=history_text or "(无历史)",
+            opponent_reply=opponent_reply,
+            extra=extra or "(无)",
+        )
+
     script = await chat_completion(system_prompt, user_msg, max_tokens=1024)
-    return {"session_id": session_id, "style": style, "script": script}
+
+    if not hasattr(session, "reply_script_history"):
+        session.reply_script_history = []
+    session.reply_script_history.append({
+        "round": round_num,
+        "style": style,
+        "script": script,
+        "opponent_reply": opponent_reply,
+        "extra": extra,
+    })
+
+    return {
+        "session_id": session_id,
+        "style": style,
+        "round": round_num,
+        "script": script,
+        "total_rounds": len(session.reply_script_history),
+    }

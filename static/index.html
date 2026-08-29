@@ -102,7 +102,7 @@
     </section>
 
     <section class="panel sub-panel" id="reply-script-panel" hidden>
-      <h2 class="panel-title">应答话术（opt-in）</h2>
+      <h2 class="panel-title">应答话术（opt-in · 多轮策略）</h2>
       <div id="opt-in-info" class="opt-in-info"></div>
       <label for="style">话术风格</label>
       <select id="style">
@@ -113,10 +113,15 @@
         <option value="引经据典">引经据典</option>
       </select>
       <label for="extra">额外说明（可选）</label>
-      <textarea id="extra" rows="3" placeholder="如：希望语气更克制 / 重点反驳对方哪条"></textarea>
-      <button type="button" id="reply-script-submit-btn" class="primary-btn">生成话术</button>
+      <textarea id="extra" rows="2" placeholder="如：我是当事方成员，不想显得敏感"></textarea>
+      <button type="button" id="reply-script-submit-btn" class="primary-btn">生成第一轮话术</button>
       <p id="reply-script-status" class="status"></p>
       <div id="reply-script-result" class="verdict-content" hidden></div>
+      <div id="reply-script-next-round" hidden>
+        <label for="opponent-reply">对方实际回复了什么？</label>
+        <textarea id="opponent-reply" rows="3" placeholder="粘贴对方的实际回复内容"></textarea>
+        <button type="button" id="reply-script-next-btn" class="primary-btn">生成下一轮话术</button>
+      </div>
     </section>
   </main>
 

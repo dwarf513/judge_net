@@ -1,6 +1,7 @@
 const API_BASE = window.location.origin;
 let currentSessionId = null;
 let progressTimer = null;
+let replyScriptRound = 0;
 
 const $ = (id) => document.getElementById(id);
 
@@ -224,21 +225,48 @@ $("reply-script-btn").addEventListener("click", async () => {
 });
 
 $("reply-script-submit-btn").addEventListener("click", async () => {
-  if (!currentSessionId) return;
+  if (!currentSessionId) { showStatus("reply-script-status", "无会话 ID，请先提交裁决", "error"); return; }
   const style = $("style").value;
   const extra = $("extra").value.trim();
-  showStatus("reply-script-status", "正在生成话术...", "info");
+  replyScriptRound = 1;
+  showStatus("reply-script-status", "正在生成第一轮话术...", "info");
   try {
     const resp = await fetch(`${API_BASE}/v1/reply-script`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ session_id: currentSessionId, style, extra }),
+      body: JSON.stringify({ session_id: currentSessionId, style, extra, round_num: 1 }),
     });
     const data = await resp.json();
     if (!resp.ok) { showStatus("reply-script-status", `错误：${data.error}`, "error"); return; }
     $("reply-script-result").innerHTML = marked.parse(data.script);
     $("reply-script-result").hidden = false;
-    showStatus("reply-script-status", "话术已生成", "success");
+    $("reply-script-next-round").hidden = false;
+    $("reply-script-submit-btn").textContent = "重新生成第一轮";
+    showStatus("reply-script-status", `第一轮完成（共 ${data.total_rounds} 轮）`, "success");
+  } catch (err) { showStatus("reply-script-status", `网络错误：${err}`, "error"); }
+});
+
+$("reply-script-next-btn").addEventListener("click", async () => {
+  if (!currentSessionId) return;
+  const style = $("style").value;
+  const extra = $("extra").value.trim();
+  const opponentReply = $("opponent-reply").value.trim();
+  if (!opponentReply) { showStatus("reply-script-status", "请填写对方的实际回复", "error"); return; }
+  replyScriptRound += 1;
+  showStatus("reply-script-status", `正在生成第 ${replyScriptRound} 轮话术...`, "info");
+  try {
+    const resp = await fetch(`${API_BASE}/v1/reply-script`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: currentSessionId, style, extra, opponent_reply: opponentReply, round_num: replyScriptRound }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) { showStatus("reply-script-status", `错误：${data.error}`, "error"); return; }
+    const oldContent = $("reply-script-result").innerHTML;
+    $("reply-script-result").innerHTML = oldContent + '<hr style="margin:1.5rem 0;border-color:var(--border)">' + marked.parse(data.script);
+    $("reply-script-result").hidden = false;
+    $("opponent-reply").value = "";
+    showStatus("reply-script-status", `第 ${replyScriptRound} 轮完成（共 ${data.total_rounds} 轮）`, "success");
   } catch (err) { showStatus("reply-script-status", `网络错误：${err}`, "error"); }
 });
 

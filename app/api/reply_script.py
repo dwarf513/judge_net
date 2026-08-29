@@ -47,7 +47,7 @@ async def reply_script_opt_in(req: ReplyScriptOptInRequest) -> Any:
 
 @router.post("/v1/reply-script", response_model=ReplyScriptResponse, responses={400: {"model": ErrorResponse}, 404: {"model": ErrorResponse}})
 async def reply_script_endpoint(req: ReplyScriptRequest) -> Any:
-    """生成应答话术（须先 opt-in）。"""
+    """生成应答话术（须先 opt-in，支持多轮对话）。"""
     valid_styles = {"直接说理", "反讽克制", "委婉纠正", "引经据典", "降温退场"}
     if req.style not in valid_styles:
         return JSONResponse(
@@ -59,6 +59,8 @@ async def reply_script_endpoint(req: ReplyScriptRequest) -> Any:
         session_id=req.session_id,
         style=req.style,
         extra=req.extra,
+        opponent_reply=req.opponent_reply,
+        round_num=req.round_num,
     )
 
     if "error" in result:
@@ -69,5 +71,7 @@ async def reply_script_endpoint(req: ReplyScriptRequest) -> Any:
     return ReplyScriptResponse(
         session_id=result["session_id"],
         style=result["style"],
+        round=result["round"],
         script=result["script"],
+        total_rounds=result["total_rounds"],
     )
