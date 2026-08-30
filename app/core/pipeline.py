@@ -102,27 +102,57 @@ def _needs_fact_check(verdict_or_dialogue: str) -> bool:
     return any(re.search(p, verdict_or_dialogue) for p in FACT_CHECK_TRIGGER_PATTERNS)
 
 
-DIALOGUE_PARSE_PROMPT = """你是一个对话结构解析器。请把下面这段格式混乱的网络对话，解析成清晰的"序号+用户名：内容"格式。
+DIALOGUE_PARSE_PROMPT = """你是一个对话结构解析器。把下面这段格式混乱的网络对话，解析成清晰的"序号+用户名：内容"格式。
 
-要求：
-1. **逐条扫描**，识别出每一条发言的真正发言者。
-2. 用户名可能出现在内容上方、旁边或行首——根据上下文判断。
-3. 日期、点赞数、平台按钮文字（如"回复"）不是发言内容，忽略。
-4. 嵌套引用（如"回复 @某某："）中，@后面是被回复者，当前发言者是这一条的用户名。
-5. **不要遗漏任何发言方**——如果某人发了 3 条，就要列出 3 条。
-6. **不要捏造**——只列出对话中真实出现过的用户名。
+## 格式识别规则
 
-输出格式（严格按此格式，不要其他解释）：
+网络平台的对话格式通常是：
+- 用户名单独一行（或在一行的开头，后面跟换行）
+- 内容在用户名的下一行（或同一行冒号后）
+- 日期、点赞数、平台按钮文字（如"回复""赞""分享"）不是发言内容
 
+**识别用户名的技巧**：
+1. 用户名通常是短文本（2-15个字符），不含句号、问号等标点。
+2. 用户名可能是中文、日文、英文、混合字符（如"辰砂ノ""muttttttghygbh""ーはじまりの未来ー"）。
+3. 如果一行只有短文本没有标点，下一行有较长的内容，那短文本行就是用户名。
+4. "回复 @某某："中的"某某"是被回复者，不是当前发言者——当前发言者是这条消息的用户名。
+5. 日期格式（如"2022-12-14 19:41"）和纯数字（如"167"）不是用户名也不是内容。
+
+## 正确的解析示例
+
+输入：
+```
+辰砂ノ
+
+网民都在嘲笑普兰塔
+2022-12-14 19:41
+
+167
+
+回复
+
+辰砂ノ
+
+ 看清楚，人家鉴证起码有行动了
+```
+
+输出：
+```
 === 格式化对话 ===
-1. [用户名A]：[发言内容]
-2. [用户名A]：[发言内容]
-3. [用户名B]：[发言内容]
-...
+1. [辰砂ノ]：网民都在嘲笑普兰塔
+2. [辰砂ノ]：看清楚，人家鉴证起码有行动了
 
 === 发言方统计 ===
-- [用户名A]：N 条
-- [用户名B]：N 条
+- 辰砂ノ：2 条
+```
+
+## 严格要求
+
+1. **逐行扫描**，不要跳过任何一行。
+2. **不要遗漏任何发言方**——如果某人发了3条，就要列出3条。
+3. **不要捏造**——只列出对话中真实出现过的用户名。
+4. 用户名拼写必须与原文完全一致（包括字母数量、特殊字符）。
+5. 如果一行看起来像是用户名但你不确定，把它当作用户名处理，宁可多识别不可遗漏。
 
 === 待解析对话 ===
 {dialogue}
@@ -259,9 +289,15 @@ async def adjudicate(
         log("dialogue structure parse start")
         try:
             parsed = await _asyncio.wait_for(_parse_dialogue_structure(dialogue), timeout=30)
-            if parsed != dialogue:
-                log(f"dialogue parsed: {len(dialogue)} → {len(parsed)} chars")
+            if parsed != dialogue and "格式化对话" in parsed:
+                # 提取发言方统计输出到日志
+                stats_lines = [line for line in parsed.split("\n") if "条" in line and "：" in line]
+                log(f"dialogue parsed OK: {len(dialogue)} → {len(parsed)} chars")
+                for sl in stats_lines[:10]:
+                    log(f"  {sl.strip()}")
                 dialogue = parsed
+            else:
+                log("dialogue parse returned no valid format, using original")
         except _asyncio.TimeoutError:
             log("dialogue parse timeout, use original")
         except Exception as exc:
