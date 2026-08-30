@@ -102,57 +102,25 @@ def _needs_fact_check(verdict_or_dialogue: str) -> bool:
     return any(re.search(p, verdict_or_dialogue) for p in FACT_CHECK_TRIGGER_PATTERNS)
 
 
-DIALOGUE_PARSE_PROMPT = """你是一个对话结构解析器。把下面这段格式混乱的网络对话，解析成清晰的"序号+用户名：内容"格式。
+DIALOGUE_PARSE_PROMPT = """把下面这段格式混乱的网络对话，解析成清晰的"序号+用户名：内容"格式。
 
-## 格式识别规则
+识别规则：
+1. 用户名通常是单独一行的短文本（2-15字符，不含句号问号等标点），可能含中文/日文/英文/混合字符。
+2. 内容在用户名的下一行。日期（如2022-12-14 19:41）、纯数字（如167）、平台按钮文字（如"回复""赞"）不是内容，跳过。
+3. "回复 @某某："中的"某某"是被回复者，不是当前发言者——当前发言者是这条消息的用户名。
+4. **逐行扫描，不要遗漏任何发言方**。某人发3条就列3条。
+5. **不要捏造**不存在的用户名。用户名拼写必须与原文完全一致。
+6. 宁可多识别不可遗漏。
 
-网络平台的对话格式通常是：
-- 用户名单独一行（或在一行的开头，后面跟换行）
-- 内容在用户名的下一行（或同一行冒号后）
-- 日期、点赞数、平台按钮文字（如"回复""赞""分享"）不是发言内容
-
-**识别用户名的技巧**：
-1. 用户名通常是短文本（2-15个字符），不含句号、问号等标点。
-2. 用户名可能是中文、日文、英文、混合字符（如"辰砂ノ""muttttttghygbh""ーはじまりの未来ー"）。
-3. 如果一行只有短文本没有标点，下一行有较长的内容，那短文本行就是用户名。
-4. "回复 @某某："中的"某某"是被回复者，不是当前发言者——当前发言者是这条消息的用户名。
-5. 日期格式（如"2022-12-14 19:41"）和纯数字（如"167"）不是用户名也不是内容。
-
-## 正确的解析示例
-
-输入：
-```
-辰砂ノ
-
-网民都在嘲笑普兰塔
-2022-12-14 19:41
-
-167
-
-回复
-
-辰砂ノ
-
- 看清楚，人家鉴证起码有行动了
-```
-
-输出：
-```
+输出格式：
 === 格式化对话 ===
-1. [辰砂ノ]：网民都在嘲笑普兰塔
-2. [辰砂ノ]：看清楚，人家鉴证起码有行动了
+1. [用户名A]：[发言内容]
+2. [用户名B]：[发言内容]
+...
 
 === 发言方统计 ===
-- 辰砂ノ：2 条
-```
-
-## 严格要求
-
-1. **逐行扫描**，不要跳过任何一行。
-2. **不要遗漏任何发言方**——如果某人发了3条，就要列出3条。
-3. **不要捏造**——只列出对话中真实出现过的用户名。
-4. 用户名拼写必须与原文完全一致（包括字母数量、特殊字符）。
-5. 如果一行看起来像是用户名但你不确定，把它当作用户名处理，宁可多识别不可遗漏。
+- [用户名A]：N 条
+- [用户名B]：N 条
 
 === 待解析对话 ===
 {dialogue}
@@ -167,12 +135,12 @@ async def _parse_dialogue_structure(dialogue: str) -> str:
     """
     from app.core.llm import chat_completion
     try:
-        prompt = DIALOGUE_PARSE_PROMPT.format(dialogue=dialogue[:6000])
+        prompt = DIALOGUE_PARSE_PROMPT.format(dialogue=dialogue[:4000])
         result = await chat_completion(
-            system_prompt="你是一个对话结构解析器。只输出格式化结果，不要其他解释。",
+            system_prompt="你是对话结构解析器。只输出格式化结果。",
             user_msg=prompt,
             model="DeepSeek-V3.2-Instruct",
-            max_tokens=2048,
+            max_tokens=1024,
             temperature=0.1,
         )
         if result and "格式化对话" in result:
@@ -288,7 +256,7 @@ async def adjudicate(
     if dialogue and len(dialogue) > 100:
         log("dialogue structure parse start")
         try:
-            parsed = await _asyncio.wait_for(_parse_dialogue_structure(dialogue), timeout=30)
+            parsed = await _asyncio.wait_for(_parse_dialogue_structure(dialogue), timeout=60)
             if parsed != dialogue and "格式化对话" in parsed:
                 # 提取发言方统计输出到日志
                 stats_lines = [line for line in parsed.split("\n") if "条" in line and "：" in line]
@@ -299,7 +267,7 @@ async def adjudicate(
             else:
                 log("dialogue parse returned no valid format, using original")
         except _asyncio.TimeoutError:
-            log("dialogue parse timeout, use original")
+            log("dialogue parse timeout (60s), use original")
         except Exception as exc:
             log(f"dialogue parse failed: {exc}")
 
