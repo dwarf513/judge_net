@@ -102,6 +102,57 @@ def _needs_fact_check(verdict_or_dialogue: str) -> bool:
     return any(re.search(p, verdict_or_dialogue) for p in FACT_CHECK_TRIGGER_PATTERNS)
 
 
+DIALOGUE_PARSE_PROMPT = """你是一个对话结构解析器。请把下面这段格式混乱的网络对话，解析成清晰的"序号+用户名：内容"格式。
+
+要求：
+1. **逐条扫描**，识别出每一条发言的真正发言者。
+2. 用户名可能出现在内容上方、旁边或行首——根据上下文判断。
+3. 日期、点赞数、平台按钮文字（如"回复"）不是发言内容，忽略。
+4. 嵌套引用（如"回复 @某某："）中，@后面是被回复者，当前发言者是这一条的用户名。
+5. **不要遗漏任何发言方**——如果某人发了 3 条，就要列出 3 条。
+6. **不要捏造**——只列出对话中真实出现过的用户名。
+
+输出格式（严格按此格式，不要其他解释）：
+
+=== 格式化对话 ===
+1. [用户名A]：[发言内容]
+2. [用户名A]：[发言内容]
+3. [用户名B]：[发言内容]
+...
+
+=== 发言方统计 ===
+- [用户名A]：N 条
+- [用户名B]：N 条
+
+=== 待解析对话 ===
+{dialogue}
+"""
+
+
+async def _parse_dialogue_structure(dialogue: str) -> str:
+    """用快速模型把混乱的对话文本解析成清晰的格式化对话。
+
+    返回格式化后的对话文本，供主裁决 LLM 使用。
+    如果解析失败，返回原始对话。
+    """
+    from app.core.llm import chat_completion
+    try:
+        prompt = DIALOGUE_PARSE_PROMPT.format(dialogue=dialogue[:6000])
+        result = await chat_completion(
+            system_prompt="你是一个对话结构解析器。只输出格式化结果，不要其他解释。",
+            user_msg=prompt,
+            model="DeepSeek-V3.2-Instruct",
+            max_tokens=2048,
+            temperature=0.1,
+        )
+        if result and "格式化对话" in result:
+            return result
+        return dialogue
+    except Exception as exc:
+        print(f"[pipeline] dialogue parse failed: {exc}", flush=True)
+        return dialogue
+
+
 QUERY_EXTRACTION_PROMPT = """从下面这段网络争议对话中，抽取 1-3 个最适合用于联网检索的事实性查询词。
 
 要求：
@@ -202,6 +253,19 @@ async def adjudicate(
             log(f"OCR timeout, continue with text only")
         except Exception as exc:
             log(f"OCR failed: {exc}, continue with text only")
+
+    # 对话结构解析（关键步骤：先格式化再裁决，避免人物错位）
+    if dialogue and len(dialogue) > 100:
+        log("dialogue structure parse start")
+        try:
+            parsed = await _asyncio.wait_for(_parse_dialogue_structure(dialogue), timeout=30)
+            if parsed != dialogue:
+                log(f"dialogue parsed: {len(dialogue)} → {len(parsed)} chars")
+                dialogue = parsed
+        except _asyncio.TimeoutError:
+            log("dialogue parse timeout, use original")
+        except Exception as exc:
+            log(f"dialogue parse failed: {exc}")
 
     t1 = _time.time()
     user_msg = ADJUDICATE_USER_PROMPT.format(dialogue=dialogue)
