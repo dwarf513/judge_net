@@ -8,7 +8,7 @@ import json
 import re
 from typing import Any
 
-from app.core.llm import chat_completion
+from app.core.llm import chat_completion, chat_completion_stream
 from app.core.ocr import format_dialogue_text, ocr_images
 from app.core.prompt_builder import get_system_prompt
 from app.core.search import format_search_results, search
