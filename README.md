@@ -2,7 +2,9 @@
 
 > 网络争吵的公正裁决者：厘清事实、辨别谬误、看见降温路径，促进网络和谐健康。
 
-**在线体验地址**：http://judge-net.icu:8080
+**在线体验地址**：https://judge-net.icu:8443 （HTTPS，推荐）
+
+**HTTP 备用地址**：http://judge-net.icu:8080
 
 **GitHub 仓库**：https://github.com/dwarf513/judge_net
 
