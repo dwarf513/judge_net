@@ -153,22 +153,28 @@ async def vision_completion(
         raise RuntimeError("LLM_MODEL_VISION 未配置，无法处理截图")
     client = get_client()
     b64 = base64.b64encode(image_bytes).decode("ascii")
-    data_url = f"data:image/png;base64,{b64}"
-    resp = await client.chat.completions.create(
-        model=model or s.llm_model_vision,
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": prompt},
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": data_url},
-                    },
-                ],
-            }
-        ],
-        max_tokens=min(max_tokens, 2048),
-        temperature=0.1,
-    )
-    return resp.choices[0].message.content or ""
+    data_url = f"data:image/jpeg;base64,{b64}"
+    print(f"[llm] vision call: model={s.llm_model_vision}, image={len(image_bytes)}bytes, "
+          f"b64={len(b64)}chars, max_tokens={min(max_tokens, 2048)}", flush=True)
+    try:
+        resp = await client.chat.completions.create(
+            model=model or s.llm_model_vision,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": data_url},
+                        },
+                    ],
+                }
+            ],
+            max_tokens=min(max_tokens, 2048),
+            temperature=0.1,
+        )
+        return resp.choices[0].message.content or ""
+    except Exception as exc:
+        print(f"[llm] vision FAILED: {type(exc).__name__}: {exc}", flush=True)
+        raise

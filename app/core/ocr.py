@@ -5,11 +5,50 @@
 """
 from __future__ import annotations
 
+import io
 import json
 import re
 from typing import Any
 
 from app.core.llm import vision_completion
+
+
+def _compress_image(image_bytes: bytes, max_size_mb: float = 1.0, max_dimension: int = 1920) -> bytes:
+    """压缩图片到合理大小，避免超过 API 限制。
+
+    - 超过 max_size_mb 的图片会被压缩
+    - 最长边超过 max_dimension 的图片会被缩放
+    - 统一转为 JPEG 格式（更小、API 兼容性更好）
+    """
+    try:
+        from PIL import Image
+    except ImportError:
+        return image_bytes
+
+    try:
+        img = Image.open(io.BytesIO(image_bytes))
+    except Exception:
+        return image_bytes
+
+    size_mb = len(image_bytes) / (1024 * 1024)
+    if size_mb <= max_size_mb and max(img.size) <= max_dimension:
+        return image_bytes
+
+    if img.mode in ("RGBA", "P"):
+        img = img.convert("RGB")
+
+    if max(img.size) > max_dimension:
+        ratio = max_dimension / max(img.size)
+        new_size = (int(img.width * ratio), int(img.height * ratio))
+        img = img.resize(new_size, Image.Resampling.LANCZOS)
+
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=85, optimize=True)
+    compressed = buf.getvalue()
+
+    print(f"[ocr] image compressed: {size_mb:.1f}MB → {len(compressed)/1024/1024:.1f}MB, "
+          f"size={img.size}", flush=True)
+    return compressed
 
 
 OCR_PROMPT = """你是一个截图解析器。请对这张社交平台截图执行以下任务：
@@ -58,7 +97,8 @@ def _extract_json(text: str) -> dict[str, Any]:
 
 async def ocr_image(image_bytes: bytes) -> dict[str, Any]:
     """单图 OCR + 角色分割。返回结构化 dict。"""
-    raw = await vision_completion(image_bytes, OCR_PROMPT, max_tokens=2048)
+    compressed = _compress_image(image_bytes)
+    raw = await vision_completion(compressed, OCR_PROMPT, max_tokens=2048)
     return _extract_json(raw)
 
 
