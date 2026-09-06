@@ -261,7 +261,96 @@ sudo certbot --nginx -d judge.your-domain.com
 
 访问 https://judge.your-domain.com 验证。
 
-## 七、更新迭代流程
+## 七、配置 HTTPS（可选但强烈推荐）
+
+当前 HTTP 明文访问，浏览器显示"不安全"。配置 HTTPS 后：
+- 浏览器显示绿色锁标志
+- clipboard API 可用（复制功能不再需要 fallback）
+- 评委体验更好
+
+### 7.1 开放防火墙 8443 端口
+
+在腾讯云控制台防火墙添加规则：
+- 协议 TCP / 端口 8443 / 来源 0.0.0.0/0 / 允许
+
+### 7.2 更新 nginx 配置（加 8443 + SSL）
+
+在服务器执行：
+
+```bash
+sudo tee /etc/nginx/sites-available/judge-net > /dev/null << 'EOF'
+server {
+    listen 8080;
+    listen [::]:8080;
+    server_name judge-net.icu www.judge-net.icu;
+    client_max_body_size 20M;
+    location / {
+        proxy_pass http://127.0.0.1:7860;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 600s;
+        proxy_connect_timeout 60s;
+    }
+}
+
+server {
+    listen 8443 ssl;
+    listen [::]:8443 ssl;
+    http2 on;
+    server_name judge-net.icu www.judge-net.icu;
+    client_max_body_size 20M;
+
+    ssl_certificate /etc/letsencrypt/live/judge-net.icu/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/judge-net.icu/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+
+    location / {
+        proxy_pass http://127.0.0.1:7860;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 600s;
+        proxy_connect_timeout 60s;
+    }
+}
+EOF
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+### 7.3 申请 SSL 证书
+
+```bash
+sudo certbot certonly --standalone -d judge-net.icu -d www.judge-net.icu
+```
+
+按提示：
+- 输入邮箱
+- 同意条款：`Y`
+- 分享邮箱：`N`
+
+> 注意：standalone 模式需要临时占用 80 端口。如果 scholar-agent 占着 80，先临时停它：
+> ```bash
+> docker stop scholar-agent
+> sudo certbot certonly --standalone -d judge-net.icu -d www.judge-net.icu
+> docker start scholar-agent
+> ```
+
+### 7.4 验证 HTTPS
+
+浏览器访问 `https://judge-net.icu:8443`，应看到绿色锁标志 + judge_net 界面。
+
+### 7.5 自动续期
+
+certbot 默认安装 systemd timer 自动续期。验证：
+
+```bash
+sudo systemctl list-timers | grep certbot
+```
 
 修改代码或提示词后：
 

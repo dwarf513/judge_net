@@ -81,31 +81,87 @@ $("submit-btn").addEventListener("click", async () => {
   if (dialogue) formData.append("dialogue", dialogue);
   const contextUrl = $("context-url")?.value.trim();
   if (contextUrl) formData.append("context_url", contextUrl);
-  for (const img of imageFiles) formData.append("images", img);
+  for (const img of images) formData.append("images", img);
 
   $("submit-btn").disabled = true;
   showStatus("submit-status", "", "");
   startProgress();
 
+  let verdictText = "";
+  let sessionId = "";
+  let searchUsed = false;
+  const verdictEl = $("verdict-rendered");
+
   try {
-    const resp = await fetch(`${API_BASE}/v1/adjudicate`, { method: "POST", body: formData });
-    const data = await resp.json();
+    const resp = await fetch(`${API_BASE}/v1/adjudicate/stream`, { method: "POST", body: formData });
     if (!resp.ok) {
-      showStatus("submit-status", `错误：${data.error || resp.statusText}`, "error");
+      const errData = await resp.json().catch(() => ({ error: resp.statusText }));
+      showStatus("submit-status", `错误：${errData.error || resp.statusText}`, "error");
       stopProgress(false);
       return;
     }
-    currentSessionId = data.session_id;
-    $("session-id-display").textContent = `会话 ID：${data.session_id}`;
-    $("search-info").textContent = data.search_used
-      ? "已注入联网检索结果（Tavily）"
-      : "仅基于模型训练知识";
-    $("verdict-rendered").innerHTML = marked.parse(data.verdict);
-    $("result-section").hidden = false;
-    collapseInput();
-    setTimeout(() => { $("result-section").scrollIntoView({ behavior: "smooth", block: "start" }); }, 100);
-    showStatus("submit-status", "裁决完成", "success");
-    stopProgress(true);
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n\n");
+      buffer = lines.pop() || "";
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        const jsonStr = line.slice(6);
+        try {
+          const event = JSON.parse(jsonStr);
+          if (event.type === "stage") {
+            const stageMap = {
+              ocr: { stage: "正在识别截图内容", pct: 10 },
+              parse: { stage: "正在解析对话结构", pct: 25 },
+              search: { stage: "正在检索权威信源", pct: 40 },
+              verdict: { stage: "正在生成裁决报告", pct: 55 },
+            };
+            const info = stageMap[event.stage];
+            if (info) {
+              $("progress-stage").textContent = info.stage;
+              $("progress-fill").style.width = info.pct + "%";
+            }
+          } else if (event.type === "chunk") {
+            verdictText += event.content;
+            verdictEl.innerHTML = marked.parse(verdictText);
+            $("result-section").hidden = false;
+            $("progress-fill").style.width = "90%";
+            $("progress-stage").textContent = "正在生成裁决报告";
+          } else if (event.type === "done") {
+            sessionId = event.session_id;
+            searchUsed = event.search_used;
+            $("progress-fill").style.width = "100%";
+            $("progress-stage").textContent = "裁决完成";
+          } else if (event.type === "error") {
+            showStatus("submit-status", `错误：${event.error}`, "error");
+            stopProgress(false);
+            return;
+          }
+        } catch (e) { }
+      }
+    }
+
+    if (verdictText.trim()) {
+      currentSessionId = sessionId;
+      $("session-id-display").textContent = `会话 ID：${sessionId}`;
+      $("search-info").textContent = searchUsed
+        ? "已注入联网检索结果（Tavily）"
+        : "仅基于模型训练知识";
+      collapseInput();
+      setTimeout(() => { $("result-section").scrollIntoView({ behavior: "smooth", block: "start" }); }, 100);
+      showStatus("submit-status", "裁决完成", "success");
+      stopProgress(true);
+    } else {
+      showStatus("submit-status", "裁决返回空内容，请重试", "error");
+      stopProgress(false);
+    }
   } catch (err) {
     showStatus("submit-status", `网络错误：${err}`, "error");
     stopProgress(false);

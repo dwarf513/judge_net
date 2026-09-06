@@ -81,6 +81,56 @@ async def chat_completion(
         raise
 
 
+async def chat_completion_stream(
+    system_prompt: str,
+    user_msg: str,
+    *,
+    model: str | None = None,
+    max_tokens: int | None = None,
+    temperature: float | None = None,
+):
+    """流式聊天补全。yield 文本片段。
+
+    内容审核 fallback：若主模型被内容审核拦截，自动切换到 GLM-5.2 重试。
+    """
+    s = get_settings()
+    client = get_client()
+    primary_model = model or s.llm_model_reasoning
+
+    try:
+        stream = await client.chat.completions.create(
+            model=primary_model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_msg},
+            ],
+            temperature=temperature if temperature is not None else s.llm_temperature,
+            max_tokens=max_tokens or s.llm_max_tokens,
+            stream=True,
+        )
+        async for chunk in stream:
+            if chunk.choices and chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content
+    except Exception as exc:
+        if _is_content_filter_error(exc) and primary_model != "GLM-5.2":
+            print(f"[llm] content filter hit on {primary_model}, falling back to GLM-5.2 (stream)", flush=True)
+            stream = await client.chat.completions.create(
+                model="GLM-5.2",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_msg},
+                ],
+                temperature=temperature if temperature is not None else s.llm_temperature,
+                max_tokens=max_tokens or s.llm_max_tokens,
+                stream=True,
+            )
+            async for chunk in stream:
+                if chunk.choices and chunk.choices[0].delta.content:
+                    yield chunk.choices[0].delta.content
+        else:
+            raise
+
+
 @retry(
     reraise=True,
     stop=stop_after_attempt(2),

@@ -371,6 +371,128 @@ async def adjudicate(
     }
 
 
+async def adjudicate_stream(
+    dialogue: str | None = None,
+    images: list[bytes] | None = None,
+    context_url: str | None = None,
+):
+    """流式主裁决。yield dict 事件。
+
+    事件类型：
+    - {"type": "stage", "stage": "ocr"} — 阶段开始
+    - {"type": "stage", "stage": "parse"} — 对话结构解析
+    - {"type": "stage", "stage": "search"} — 联网检索
+    - {"type": "stage", "stage": "verdict"} — 主裁决开始
+    - {"type": "chunk", "content": "..."} — 裁决文本片段
+    - {"type": "done", "session_id": "...", "search_used": bool} — 完成
+    - {"type": "error", "error": "..."} — 错误
+    """
+    import asyncio as _asyncio
+    import time as _time
+    import sys
+
+    def log(msg: str) -> None:
+        print(f"[pipeline {_time.strftime('%H:%M:%S')}] {msg}", file=sys.stdout, flush=True)
+
+    if not dialogue and not images:
+        yield {"type": "error", "error": "必须提供对话文本或截图"}
+        return
+
+    log(f"start adjudicate_stream: dialogue={len(dialogue or '')} chars, images={len(images or [])}")
+    system_prompt = get_system_prompt()
+    search_used = False
+
+    # OCR 阶段
+    if images and not dialogue:
+        yield {"type": "stage", "stage": "ocr"}
+        log("OCR stage start")
+        try:
+            ocr_result = await _asyncio.wait_for(ocr_images(images), timeout=180)
+            dialogue = format_dialogue_text(ocr_result)
+            log(f"OCR done, dialogue={len(dialogue)} chars")
+        except Exception as exc:
+            yield {"type": "error", "error": f"截图 OCR 失败：{exc}"}
+            return
+    elif images and dialogue:
+        yield {"type": "stage", "stage": "ocr"}
+        try:
+            ocr_result = await _asyncio.wait_for(ocr_images(images), timeout=180)
+            ocr_text = format_dialogue_text(ocr_result)
+            dialogue = f"{dialogue}\n\n=== 截图识别补充 ===\n{ocr_text}"
+        except Exception:
+            pass
+
+    # 对话结构解析
+    if dialogue and len(dialogue) > 100:
+        yield {"type": "stage", "stage": "parse"}
+        log("dialogue structure parse start")
+        try:
+            parsed = await _asyncio.wait_for(_parse_dialogue_structure(dialogue), timeout=60)
+            if parsed != dialogue and "格式化对话" in parsed:
+                dialogue = parsed
+                log("dialogue parsed OK")
+        except Exception:
+            log("dialogue parse failed, use original")
+
+    user_msg = ADJUDICATE_USER_PROMPT.format(dialogue=dialogue)
+
+    # URL 抓取
+    if context_url:
+        try:
+            url_result = await _asyncio.wait_for(fetch_url_content(context_url), timeout=20)
+            if url_result.get("content"):
+                user_msg += f"\n\n{format_url_content(url_result)}"
+                title = url_result.get("title", "")
+                if title:
+                    expand_results = await _asyncio.wait_for(search(title, max_results=3), timeout=30)
+                    if expand_results.get("results"):
+                        user_msg += f"\n\n=== 基于链接的拓展检索 ===\n{format_search_results([expand_results])}"
+                        search_used = True
+        except Exception:
+            pass
+
+    # 联网检索
+    if _needs_fact_check(dialogue):
+        yield {"type": "stage", "stage": "search"}
+        log("fact-check stage start")
+        try:
+            queries = await _asyncio.wait_for(_llm_extract_queries(dialogue), timeout=30)
+            if queries:
+                tasks = [search(q, max_results=3) for q in queries]
+                search_results_list = await _asyncio.wait_for(
+                    _asyncio.gather(*tasks, return_exceptions=True), timeout=60
+                )
+                search_results = [r for r in search_results_list if isinstance(r, dict)]
+                if search_results:
+                    search_used = True
+                    user_msg += f"\n\n=== 联网检索补充 ===\n{format_search_results(search_results)}"
+        except Exception:
+            log("search failed")
+
+    # 主裁决流式
+    yield {"type": "stage", "stage": "verdict"}
+    log("main verdict stream start")
+
+    full_verdict = ""
+    try:
+        async for chunk in chat_completion_stream(system_prompt, user_msg):
+            full_verdict += chunk
+            yield {"type": "chunk", "content": chunk}
+    except Exception as exc:
+        log(f"main verdict stream error: {exc}")
+        yield {"type": "error", "error": f"主裁决生成失败：{exc}"}
+        return
+
+    if not full_verdict.strip():
+        yield {"type": "error", "error": "主裁决返回空内容"}
+        return
+
+    session = get_session_store().create(dialogue=dialogue, verdict=full_verdict)
+    log(f"main verdict stream done, verdict={len(full_verdict)} chars")
+
+    yield {"type": "done", "session_id": session.session_id, "search_used": search_used}
+
+
 async def appeal(
     session_id: str,
     appealed_section: str,
