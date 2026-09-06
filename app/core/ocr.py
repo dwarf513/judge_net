@@ -105,16 +105,29 @@ async def ocr_image(image_bytes: bytes) -> dict[str, Any]:
 async def ocr_images(images: list[bytes]) -> dict[str, Any]:
     """多图 OCR，结果按时间顺序拼接，发言方去重，相同内容去重。
 
-    多图并发调用 GLM-4V，避免串行等待。
+    并发策略：最多 2 张一批，避免 API 限流。
     """
+    import asyncio
+
     if not images:
         return {"speakers": [], "messages": [], "notes": "无图片"}
     if len(images) == 1:
         return await ocr_image(images[0])
 
-    import asyncio
-    tasks = [ocr_image(img) for img in images]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
+    BATCH_SIZE = 2
+    results: list[Any] = []
+
+    for i in range(0, len(images), BATCH_SIZE):
+        batch = images[i:i + BATCH_SIZE]
+        batch_num = i // BATCH_SIZE + 1
+        total_batches = (len(images) + BATCH_SIZE - 1) // BATCH_SIZE
+        print(f"[ocr] batch {batch_num}/{total_batches} start ({len(batch)} images)", flush=True)
+
+        tasks = [ocr_image(img) for img in batch]
+        batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+        results.extend(batch_results)
+
+        print(f"[ocr] batch {batch_num}/{total_batches} done", flush=True)
 
     merged_speakers: list[dict[str, Any]] = []
     merged_messages: list[dict[str, Any]] = []

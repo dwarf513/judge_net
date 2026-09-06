@@ -236,7 +236,7 @@ async def adjudicate(
     if images and not dialogue:
         log("OCR stage start (images only)")
         try:
-            ocr_result = await _asyncio.wait_for(ocr_images(images), timeout=180)
+            ocr_result = await _asyncio.wait_for(ocr_images(images), timeout=300)
             dialogue = format_dialogue_text(ocr_result)
             log(f"OCR done in {_time.time()-t0:.1f}s, dialogue={len(dialogue)} chars")
         except _asyncio.TimeoutError:
@@ -248,7 +248,7 @@ async def adjudicate(
     elif images and dialogue:
         log("OCR stage start (images + text)")
         try:
-            ocr_result = await _asyncio.wait_for(ocr_images(images), timeout=180)
+            ocr_result = await _asyncio.wait_for(ocr_images(images), timeout=300)
             ocr_text = format_dialogue_text(ocr_result)
             dialogue = f"{dialogue}\n\n=== 截图识别补充 ===\n{ocr_text}"
             log(f"OCR done in {_time.time()-t0:.1f}s, dialogue={len(dialogue)} chars")
@@ -407,7 +407,7 @@ async def adjudicate_stream(
         yield {"type": "stage", "stage": "ocr"}
         log("OCR stage start")
         try:
-            ocr_result = await _asyncio.wait_for(ocr_images(images), timeout=180)
+            ocr_result = await _asyncio.wait_for(ocr_images(images), timeout=300)
             dialogue = format_dialogue_text(ocr_result)
             log(f"OCR done, dialogue={len(dialogue)} chars")
         except _asyncio.TimeoutError:
@@ -420,7 +420,7 @@ async def adjudicate_stream(
     elif images and dialogue:
         yield {"type": "stage", "stage": "ocr"}
         try:
-            ocr_result = await _asyncio.wait_for(ocr_images(images), timeout=180)
+            ocr_result = await _asyncio.wait_for(ocr_images(images), timeout=300)
             ocr_text = format_dialogue_text(ocr_result)
             dialogue = f"{dialogue}\n\n=== 截图识别补充 ===\n{ocr_text}"
         except _asyncio.TimeoutError:
