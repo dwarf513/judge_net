@@ -9,7 +9,7 @@ import re
 from typing import Any
 
 from app.core.llm import chat_completion, chat_completion_stream
-from app.core.ocr import format_dialogue_text, ocr_images
+from app.core.ocr import ocr_images
 from app.core.prompt_builder import get_system_prompt
 from app.core.search import format_search_results, search
 from app.core.session import get_session_store
@@ -236,8 +236,8 @@ async def adjudicate(
     if images and not dialogue:
         log("OCR stage start (images only)")
         try:
-            ocr_result = await _asyncio.wait_for(ocr_images(images), timeout=300)
-            dialogue = format_dialogue_text(ocr_result)
+            ocr_text_raw = await _asyncio.wait_for(ocr_images(images), timeout=300)
+            dialogue = ocr_text_raw
             log(f"OCR done in {_time.time()-t0:.1f}s, dialogue={len(dialogue)} chars")
         except _asyncio.TimeoutError:
             log(f"OCR TIMEOUT after {_time.time()-t0:.1f}s")
@@ -248,8 +248,8 @@ async def adjudicate(
     elif images and dialogue:
         log("OCR stage start (images + text)")
         try:
-            ocr_result = await _asyncio.wait_for(ocr_images(images), timeout=300)
-            ocr_text = format_dialogue_text(ocr_result)
+            ocr_text_raw = await _asyncio.wait_for(ocr_images(images), timeout=300)
+            ocr_text = ocr_text_raw
             dialogue = f"{dialogue}\n\n=== 截图识别补充 ===\n{ocr_text}"
             log(f"OCR done in {_time.time()-t0:.1f}s, dialogue={len(dialogue)} chars")
         except _asyncio.TimeoutError:
@@ -407,8 +407,8 @@ async def adjudicate_stream(
         yield {"type": "stage", "stage": "ocr"}
         log("OCR stage start")
         try:
-            ocr_result = await _asyncio.wait_for(ocr_images(images), timeout=300)
-            dialogue = format_dialogue_text(ocr_result)
+            ocr_text_raw = await _asyncio.wait_for(ocr_images(images), timeout=300)
+            dialogue = ocr_text_raw
             log(f"OCR done, dialogue={len(dialogue)} chars")
         except _asyncio.TimeoutError:
             yield {"type": "error", "error": "截图 OCR 超时（180s），请尝试更清晰的截图或改用文本粘贴"}
@@ -420,8 +420,8 @@ async def adjudicate_stream(
     elif images and dialogue:
         yield {"type": "stage", "stage": "ocr"}
         try:
-            ocr_result = await _asyncio.wait_for(ocr_images(images), timeout=300)
-            ocr_text = format_dialogue_text(ocr_result)
+            ocr_text_raw = await _asyncio.wait_for(ocr_images(images), timeout=300)
+            ocr_text = ocr_text_raw
             dialogue = f"{dialogue}\n\n=== 截图识别补充 ===\n{ocr_text}"
         except _asyncio.TimeoutError:
             log("OCR timeout, continue with text only")
