@@ -410,8 +410,12 @@ async def adjudicate_stream(
             ocr_result = await _asyncio.wait_for(ocr_images(images), timeout=180)
             dialogue = format_dialogue_text(ocr_result)
             log(f"OCR done, dialogue={len(dialogue)} chars")
+        except _asyncio.TimeoutError:
+            yield {"type": "error", "error": "截图 OCR 超时（180s），请尝试更清晰的截图或改用文本粘贴"}
+            return
         except Exception as exc:
-            yield {"type": "error", "error": f"截图 OCR 失败：{exc}"}
+            log(f"OCR error: {type(exc).__name__}: {exc}")
+            yield {"type": "error", "error": f"截图 OCR 失败（{type(exc).__name__}）：{exc}"}
             return
     elif images and dialogue:
         yield {"type": "stage", "stage": "ocr"}
@@ -419,8 +423,10 @@ async def adjudicate_stream(
             ocr_result = await _asyncio.wait_for(ocr_images(images), timeout=180)
             ocr_text = format_dialogue_text(ocr_result)
             dialogue = f"{dialogue}\n\n=== 截图识别补充 ===\n{ocr_text}"
-        except Exception:
-            pass
+        except _asyncio.TimeoutError:
+            log("OCR timeout, continue with text only")
+        except Exception as exc:
+            log(f"OCR failed: {type(exc).__name__}: {exc}, continue with text only")
 
     # 对话结构解析
     if dialogue and len(dialogue) > 100:
