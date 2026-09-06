@@ -4,6 +4,8 @@
 
 **在线体验地址**：http://judge-net.icu:8080
 
+**GitHub 仓库**：https://github.com/dwarf513/judge_net
+
 **赛道**：DIY 高代码（FastAPI 后端 + 原生前端 + Docker 部署到腾讯云轻量服务器）
 
 ---
@@ -203,5 +205,5 @@ python3 scripts/regression_test.py --report-only   # 仅从已有输出生成报
 | 11 | `tests/test_pipeline.py` 单元测试 | 完成 |
 | 12 | `Dockerfile` + `requirements.txt` + `.env.example` | 完成 |
 | 13 | `README.md` 门面文档 | 完成 |
-| 14 | 部署到腾讯云轻量服务器 + 回填公网域名 | 完成 |
-| 15 | `git init` + 首次 commit | 完成 |
+| 14 | 部署到腾讯云轻量服务器 + 域名 + GitHub 推送 | 完成 |
+| 15 | SSE 流式输出 + HTTPS 配置指引 | 完成 |

@@ -66,6 +66,7 @@ CASES: list[dict[str, Any]] = [
         "type_label": "A 诚意知识争辩",
         "must_contain": [
             *TWELVE_SECTIONS,
+            "对话结构复述",
             "A",
             "诚意知识争辩",
             "较正确一方",
@@ -86,6 +87,7 @@ CASES: list[dict[str, Any]] = [
         "type_label": "B 偶发口角",
         "must_contain": [
             *TWELVE_SECTIONS,
+            "对话结构复述",
             "B",
             "偶发口角",
             "价值分歧",
@@ -103,6 +105,7 @@ CASES: list[dict[str, Any]] = [
         "type_label": "C CIB 协同造假",
         "must_contain": [
             *TWELVE_SECTIONS,
+            "对话结构复述",
             "C",
             "CIB",
             "协同造假",
@@ -119,6 +122,7 @@ CASES: list[dict[str, Any]] = [
         "type_label": "E 阴谋论",
         "must_contain": [
             *TWELVE_SECTIONS,
+            "对话结构复述",
             "E",
             "阴谋论",
             ["逐条证伪", "逐条反驳", "逐项证伪", "逐一证伪", "证伪"],
@@ -136,6 +140,7 @@ CASES: list[dict[str, Any]] = [
         "type_label": "F 谣言/AI 骗局",
         "must_contain": [
             *TWELVE_SECTIONS,
+            "对话结构复述",
             "F",
             ["疑似 AI 生成", "高度疑似"],
             "查无此",
