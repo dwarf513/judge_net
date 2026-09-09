@@ -11,6 +11,27 @@ window.addEventListener("scroll", () => {
   if (el) el.style.width = scrolled + "%";
 });
 
+// 滚动触发渐入（节标题）
+const revealObserver = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.classList.add("reveal-in");
+    }
+  });
+}, { threshold: 0.1, rootMargin: "0px 0px -50px 0px" });
+
+// 动态观察新增的 h2 元素
+function observeReveals() {
+  document.querySelectorAll(".verdict-content h2:not(.reveal-in):not(.observed)").forEach(el => {
+    el.classList.add("observed");
+    revealObserver.observe(el);
+  });
+}
+
+// MutationObserver 监听 DOM 变化（裁决报告渲染后自动观察新 h2）
+const mutationObserver = new MutationObserver(() => observeReveals());
+mutationObserver.observe(document.body, { childList: true, subtree: true });
+
 const $ = (id) => document.getElementById(id);
 
 const PROGRESS_STAGES = [
