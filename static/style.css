@@ -45,6 +45,45 @@ body {
   font-size: 17px;
   line-height: 1.85;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  position: relative;
+}
+
+/* 背景细微动态光斑（空白区域不空旷） */
+body::before {
+  content: "";
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(ellipse 600px 400px at 15% 20%, rgba(122, 95, 34, 0.03) 0%, transparent 60%),
+    radial-gradient(ellipse 500px 300px at 85% 80%, rgba(52, 82, 118, 0.025) 0%, transparent 60%);
+  animation: bgDrift 20s ease-in-out infinite alternate;
+}
+
+@keyframes bgDrift {
+  0% { background-position: 0% 0%, 100% 100%; transform: scale(1); }
+  50% { background-position: 5% 3%, 95% 97%; transform: scale(1.02); }
+  100% { background-position: 0% 0%, 100% 100%; transform: scale(1); }
+}
+
+/* 阅读进度条 */
+.reading-progress {
+  position: fixed;
+  top: 0; left: 0;
+  height: 2px;
+  width: 0%;
+  background: linear-gradient(90deg, var(--gold), var(--gold-bright));
+  z-index: 9999;
+  transition: width 0.15s ease;
+}
+
+/* 确保内容在背景之上 */
+.layout, .hero, footer {
+  position: relative;
+  z-index: 1;
 }
 
 ::selection { background: var(--gold-wash); color: var(--ink); }
@@ -54,7 +93,7 @@ body {
 ::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 5px; border: 2px solid var(--paper); }
 ::-webkit-scrollbar-thumb:hover { background: var(--gold); }
 
-/* ═══════════ HERO · 杂志封面（大字重） ═══════════ */
+/* ═══════════ HERO · 杂志封面（大字重+动态装饰） ═══════════ */
 
 .hero {
   position: relative;
@@ -62,17 +101,25 @@ body {
   padding: 5.5rem 1.5rem 5rem;
   background: var(--paper);
   border-bottom: 2px solid var(--ink);
+  overflow: hidden;
 }
 
+/* 上下动态金线 */
 .hero::before {
   content: "";
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  width: 340px;
+  width: 0;
   height: 2px;
-  background: var(--ink);
+  background: linear-gradient(90deg, transparent, var(--gold), transparent);
   top: 3rem;
+  animation: lineExpand 2s var(--ease) 0.5s forwards;
+}
+
+@keyframes lineExpand {
+  from { width: 0; opacity: 0; }
+  to { width: 340px; opacity: 1; }
 }
 
 .hero::after {
@@ -80,10 +127,28 @@ body {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  width: 340px;
+  width: 0;
   height: 2px;
-  background: var(--ink);
+  background: linear-gradient(90deg, transparent, var(--gold), transparent);
   bottom: 3rem;
+  animation: lineExpand 2s var(--ease) 0.8s forwards;
+}
+
+/* Hero 背景细微纹理 */
+.hero-bg-glow {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle, rgba(122, 95, 34, 0.04) 0%, transparent 70%);
+  pointer-events: none;
+  animation: glowPulse 4s ease-in-out infinite;
+}
+
+@keyframes glowPulse {
+  0%, 100% { opacity: 0.6; transform: translate(-50%, -50%) scale(1); }
+  50% { opacity: 1; transform: translate(-50%, -50%) scale(1.1); }
 }
 
 .hero-kicker {
@@ -94,13 +159,22 @@ body {
   text-indent: 0.6em;
   color: var(--gold);
   margin: 0 0 2rem;
+  opacity: 0;
+  animation: fadeInDown 0.8s var(--ease) 0.3s forwards;
 }
 
 .hero-icon {
   display: block;
   margin: 0 auto 2rem;
   color: var(--ink);
-  opacity: 0.9;
+  opacity: 0;
+  animation: fadeInDown 0.8s var(--ease) 0.5s forwards;
+  filter: drop-shadow(0 2px 8px rgba(122, 95, 34, 0.15));
+  transition: transform 0.4s var(--ease);
+}
+
+.hero-icon:hover {
+  transform: scale(1.08) rotate(2deg);
 }
 
 .hero-title {
@@ -111,6 +185,19 @@ body {
   margin: 0;
   color: var(--ink);
   line-height: 1.15;
+  opacity: 0;
+  animation: fadeInUp 1s var(--ease) 0.7s forwards;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+
+@keyframes fadeInDown {
+  from { opacity: 0; transform: translateY(-12px); }
+  to { opacity: 0.9; transform: translateY(0); }
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .hero-title em {
@@ -445,6 +532,19 @@ textarea::placeholder, input::placeholder { color: var(--ink-faint); opacity: 0.
   padding-bottom: 1.3rem;
   border-bottom: 3px solid var(--ink);
   letter-spacing: 0.08em;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  position: relative;
+}
+
+.verdict-content h1::after {
+  content: "";
+  position: absolute;
+  bottom: -3px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 60px;
+  height: 3px;
+  background: var(--gold);
 }
 
 .verdict-content h2 {
@@ -456,6 +556,18 @@ textarea::placeholder, input::placeholder { color: var(--ink-faint); opacity: 0.
   padding-left: 1rem;
   border-left: 5px solid var(--gold);
   letter-spacing: 0.02em;
+  position: relative;
+}
+
+.verdict-content h2::before {
+  content: "§";
+  position: absolute;
+  left: -1.8rem;
+  top: 0;
+  font-size: 1rem;
+  color: var(--gold);
+  opacity: 0.5;
+  font-weight: 400;
 }
 
 .verdict-content h3 {
@@ -538,7 +650,13 @@ textarea::placeholder, input::placeholder { color: var(--ink-faint); opacity: 0.
   width: 3.4rem;
   height: 2px;
   margin: 0.7rem auto;
-  background: var(--gold);
+  background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  animation: lineExpand2 1.5s var(--ease) 0.5s forwards;
+}
+
+@keyframes lineExpand2 {
+  from { width: 0; }
+  to { width: 3.4rem; }
 }
 
 .verdict-content code {

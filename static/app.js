@@ -2,6 +2,14 @@ const API_BASE = window.location.origin;
 let currentSessionId = null;
 let progressTimer = null;
 let replyScriptRound = 0;
+let imageFiles = [];
+
+// 阅读进度条
+window.addEventListener("scroll", () => {
+  const scrolled = (window.scrollY / (document.documentElement.scrollHeight - window.innerHeight)) * 100;
+  const el = document.getElementById("reading-progress");
+  if (el) el.style.width = scrolled + "%";
+});
 
 const $ = (id) => document.getElementById(id);
 
@@ -169,8 +177,6 @@ $("submit-btn").addEventListener("click", async () => {
     $("submit-btn").disabled = false;
   }
 });
-
-let imageFiles = [];
 
 function renderImagePreview() {
   const preview = $("image-preview");
