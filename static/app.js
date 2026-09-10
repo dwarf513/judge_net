@@ -399,3 +399,92 @@ function showStatus(elementId, message, type) {
   el.textContent = message;
   el.className = "status " + (type || "");
 }
+
+// ═══════════ 聊天功能 ═══════════
+
+$("chat-btn")?.addEventListener("click", () => {
+  if (!currentSessionId) { return; }
+  $("chat-panel").hidden = false;
+  $("chat-panel").scrollIntoView({ behavior: "smooth" });
+  $("chat-input")?.focus();
+});
+
+async function sendChatMessage() {
+  if (!currentSessionId) return;
+  const input = $("chat-input");
+  const msg = input.value.trim();
+  if (!msg) return;
+
+  input.value = "";
+  const sendBtn = $("chat-send-btn");
+  sendBtn.disabled = true;
+
+  const messagesEl = $("chat-messages");
+
+  const userMsg = document.createElement("div");
+  userMsg.className = "chat-msg user";
+  userMsg.innerHTML = `<div class="role">你</div><div class="content">${msg.replace(/</g, "&lt;")}</div>`;
+  messagesEl.appendChild(userMsg);
+
+  const assistantMsg = document.createElement("div");
+  assistantMsg.className = "chat-msg assistant";
+  assistantMsg.innerHTML = `<div class="role">judge_net</div><div class="content"></div>`;
+  messagesEl.appendChild(assistantMsg);
+  const contentEl = assistantMsg.querySelector(".content");
+
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+
+  let chatText = "";
+  try {
+    const resp = await fetch(`${API_BASE}/v1/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: currentSessionId, message: msg }),
+    });
+
+    if (!resp.ok) {
+      const errData = await resp.json().catch(() => ({ error: resp.statusText }));
+      contentEl.innerHTML = `<p style="color:var(--danger)">错误：${errData.error || resp.statusText}</p>`;
+      return;
+    }
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n\n");
+      buffer = lines.pop() || "";
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        try {
+          const event = JSON.parse(line.slice(6));
+          if (event.type === "chunk") {
+            chatText += event.content;
+            contentEl.innerHTML = marked.parse(chatText);
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+          } else if (event.type === "error") {
+            contentEl.innerHTML += `<p style="color:var(--danger)">错误：${event.error}</p>`;
+          }
+        } catch (e) { }
+      }
+    }
+  } catch (err) {
+    contentEl.innerHTML = `<p style="color:var(--danger)">网络错误：${err}</p>`;
+  } finally {
+    sendBtn.disabled = false;
+    input.focus();
+  }
+}
+
+$("chat-send-btn")?.addEventListener("click", sendChatMessage);
+
+$("chat-input")?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    sendChatMessage();
+  }
+});

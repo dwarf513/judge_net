@@ -741,6 +741,74 @@ textarea::placeholder, input::placeholder { color: var(--ink-faint); opacity: 0.
 
 .sub-panel { padding: 2.8rem 3.2rem; }
 
+/* ═══════════ 聊天面板 ═══════════ */
+
+.chat-messages {
+  max-height: 500px;
+  overflow-y: auto;
+  margin-bottom: 1rem;
+  padding: 0.5rem;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+
+.chat-msg {
+  margin-bottom: 1rem;
+  padding: 0.8rem 1.1rem;
+  border-radius: 3px;
+  line-height: 1.8;
+  animation: rise 0.3s var(--ease) both;
+}
+
+.chat-msg.user {
+  background: var(--paper-dim);
+  border-left: 3px solid var(--indigo);
+  margin-left: 2rem;
+}
+
+.chat-msg.assistant {
+  background: var(--paper-card);
+  border-left: 3px solid var(--gold);
+  margin-right: 2rem;
+}
+
+.chat-msg .role {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--ink-faint);
+  margin-bottom: 0.3rem;
+  letter-spacing: 0.05em;
+}
+
+.chat-msg.user .role { color: var(--indigo); }
+.chat-msg.assistant .role { color: var(--gold); }
+
+.chat-msg .content {
+  font-size: 0.95rem;
+  color: var(--ink-soft);
+}
+
+.chat-msg .content p { margin: 0.4rem 0; }
+.chat-msg .content ul, .chat-msg .content ol { padding-left: 1.4rem; margin: 0.4rem 0; }
+
+.chat-input-area {
+  display: flex;
+  gap: 0.6rem;
+  align-items: stretch;
+}
+
+.chat-input-area input[type="text"] {
+  flex: 1;
+}
+
+.chat-send-btn {
+  width: auto;
+  margin-top: 0;
+  padding: 0.75rem 1.4rem;
+  white-space: nowrap;
+}
+
 .opt-in-info {
   background: var(--paper);
   border-left: 3px solid var(--gold);

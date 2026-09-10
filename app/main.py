@@ -18,6 +18,7 @@ from app.config import get_settings
 from app.api.adjudicate import router as adjudicate_router
 from app.api.appeal import router as appeal_router
 from app.api.reply_script import router as reply_script_router
+from app.api.chat import router as chat_router
 from app.core.prompt_builder import get_system_prompt
 
 
@@ -58,6 +59,7 @@ def create_app() -> FastAPI:
     app.include_router(adjudicate_router)
     app.include_router(appeal_router)
     app.include_router(reply_script_router)
+    app.include_router(chat_router)
 
     @app.get("/")
     async def root():
@@ -74,8 +76,10 @@ def create_app() -> FastAPI:
             "description": "网络冲突法官智能体",
             "endpoints": {
                 "adjudicate": "/v1/adjudicate",
+                "adjudicate_stream": "/v1/adjudicate/stream",
                 "appeal": "/v1/appeal",
                 "reply_script": "/v1/reply-script",
+                "chat": "/v1/chat",
                 "health": "/healthz",
             },
         }
